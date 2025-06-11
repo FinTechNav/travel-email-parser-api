@@ -1,5 +1,8 @@
 # Travel Email Parser API
 
+[![Node.js CI](https://github.com/YOUR_USERNAME/travel-email-parser-api/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/travel-email-parser-api/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AI-powered travel email parsing API that extracts structured data from airline, hotel, car rental, and other travel confirmation emails.
 
 ## Features
@@ -98,6 +101,19 @@ railway up
 docker build -t travel-email-parser .
 docker run -p 3000:3000 --env-file .env travel-email-parser
 ```
+
+## 📖 Documentation
+- [API Documentation](docs/openapi.yaml)
+- [Setup Guide](docs/setup.md)
+- [Deployment Guide](docs/deployment.md)
+
+## 🤝 Contributing
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
 
 ## 💰 Cost Estimate (1000 emails/month)
 - OpenAI API: $2-5
