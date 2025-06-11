@@ -1,83 +1,128 @@
-// src/utils/logger.js
-const winston = require('winston');
+// src/utils/logger.js - Custom homegrown logger
+const fs = require('fs');
 const path = require('path');
 
-// Define log levels
-const levels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
-};
-
-// Define colors for each level
+// ANSI color codes for console output
 const colors = {
-  error: 'red',
-  warn: 'yellow',
-  info: 'green',
-  http: 'magenta',
-  debug: 'white',
+  reset: '\x1b[0m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  green: '\x1b[32m',
+  magenta: '\x1b[35m',
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
 };
 
-winston.addColors(colors);
+// Log levels
+const levels = {
+  error: { priority: 0, color: colors.red, label: 'ERROR' },
+  warn: { priority: 1, color: colors.yellow, label: 'WARN ' },
+  info: { priority: 2, color: colors.green, label: 'INFO ' },
+  http: { priority: 3, color: colors.magenta, label: 'HTTP ' },
+  debug: { priority: 4, color: colors.gray, label: 'DEBUG' },
+};
 
-// Custom format for console output
-const consoleFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:SSS' }), // Fixed: Use SSS for milliseconds
-  winston.format.colorize({ all: true }),
-  winston.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`)
-);
+class CustomLogger {
+  constructor() {
+    this.logLevel = process.env.LOG_LEVEL || 'info';
+    this.currentLogLevel = levels[this.logLevel]?.priority ?? 2;
 
-// Custom format for file output
-const fileFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:SSS' }), // Fixed: Use SSS for milliseconds
-  winston.format.errors({ stack: true }),
-  winston.format.json()
-);
+    // Create logs directory if needed (only in production)
+    if (process.env.NODE_ENV === 'production') {
+      this.logsDir = path.join(__dirname, '../../logs');
+      this.ensureLogsDirectory();
+    }
+  }
 
-// Define transports
-const transports = [
-  // Console transport
-  new winston.transports.Console({
-    level: process.env.LOG_LEVEL || 'info',
-    format: consoleFormat,
-  }),
-];
+  ensureLogsDirectory() {
+    if (!fs.existsSync(this.logsDir)) {
+      fs.mkdirSync(this.logsDir, { recursive: true });
+    }
+  }
 
-// Add file transports in production
-if (process.env.NODE_ENV === 'production') {
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(__dirname, '../../logs/error.log'),
-      level: 'error',
-      format: fileFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    new winston.transports.File({
-      filename: path.join(__dirname, '../../logs/combined.log'),
-      format: fileFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    })
-  );
+  formatTimestamp() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const milliseconds = String(now.getMilliseconds()).padStart(3, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}:${milliseconds}`;
+  }
+
+  formatMessage(level, message) {
+    const timestamp = this.formatTimestamp();
+    const levelInfo = levels[level];
+
+    // Console format (with colors)
+    const consoleMessage = `${timestamp} ${levelInfo.color}${levelInfo.label}${colors.reset}: ${message}`;
+
+    // File format (no colors)
+    const fileMessage = `${timestamp} ${levelInfo.label}: ${message}`;
+
+    return { consoleMessage, fileMessage, timestamp };
+  }
+
+  log(level, message) {
+    const levelInfo = levels[level];
+    if (!levelInfo || levelInfo.priority > this.currentLogLevel) {
+      return; // Don't log if level is disabled
+    }
+
+    const { consoleMessage, fileMessage } = this.formatMessage(level, message);
+
+    // Always log to console
+    console.log(consoleMessage);
+
+    // Log to files in production
+    if (process.env.NODE_ENV === 'production') {
+      this.writeToFile(level, fileMessage);
+    }
+  }
+
+  writeToFile(level, message) {
+    try {
+      // Write to combined log
+      const combinedLogPath = path.join(this.logsDir, 'combined.log');
+      fs.appendFileSync(combinedLogPath, message + '\n');
+
+      // Write errors to separate error log
+      if (level === 'error') {
+        const errorLogPath = path.join(this.logsDir, 'error.log');
+        fs.appendFileSync(errorLogPath, message + '\n');
+      }
+    } catch (error) {
+      // If file logging fails, just continue (don't crash the app)
+      console.error('Failed to write to log file:', error.message);
+    }
+  }
+
+  // Public logging methods
+  error(message) {
+    this.log('error', message);
+  }
+
+  warn(message) {
+    this.log('warn', message);
+  }
+
+  info(message) {
+    this.log('info', message);
+  }
+
+  http(message) {
+    this.log('http', message);
+  }
+
+  debug(message) {
+    this.log('debug', message);
+  }
 }
 
-// Create logger instance
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  levels,
-  format: fileFormat,
-  transports,
-  exitOnError: false,
-});
-
-// Create logs directory if it doesn't exist
-const fs = require('fs');
-const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
-}
+// Create and export singleton instance
+const logger = new CustomLogger();
 
 module.exports = logger;
