@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  apiKey    String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  itineraries Itinerary[]
+  usage       ApiUsage[]
+  
+  @@map("users")
+}
+
+model Itinerary {
+  id          String   @id @default(cuid())
+  userId      String
+  tripName    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  destination String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user     User      @relation(fields: [userId], references: [id])
+  segments Segment[]
+  
+  @@map("itineraries")
+}
+
+model Segment {
+  id               String    @id @default(cuid())
+  itineraryId      String
+  type             String
+  confirmationNumber String?
+  startDateTime    DateTime?
+  endDateTime      DateTime?
+  origin           String?
+  destination      String?
+  details          Json?
+  rawEmail         String?
+  parsedAt         DateTime  @default(now())
+  
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+  
+  @@map("segments")
+}
+
+model ApiUsage {
+  id          String   @id @default(cuid())
+  userId      String
+  endpoint    String
+  requestsCount Int    @default(1)
+  date        DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@unique([userId, endpoint, date])
+  @@map("api_usage")
+}
