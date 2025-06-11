@@ -15,11 +15,13 @@ AI-powered travel email parsing API that extracts structured data from airline, 
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js 18+
 - Supabase account (free tier)
 - OpenAI API account
 
 ### 1. Setup Project
+
 ```bash
 # Clone/create project
 # Run setup script
@@ -36,6 +38,7 @@ AI-powered travel email parsing API that extracts structured data from airline, 
    - Copy **Session pooler** (port 5432) for DIRECT_URL
 
 ### 3. Update .env File
+
 ```env
 # Transaction pooler for app runtime
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@aws-0-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
@@ -51,11 +54,13 @@ JWT_SECRET="your_super_long_jwt_secret_at_least_32_characters_long"
 ```
 
 ### 4. Initialize Database
+
 ```bash
 npx prisma migrate dev --name init
 ```
 
 ### 5. Start Development Server
+
 ```bash
 npm run dev
 ```
@@ -65,14 +70,17 @@ Visit http://localhost:3000 for API documentation.
 ## 🔧 Troubleshooting
 
 ### Migration Hangs
+
 - **Cause**: Missing DIRECT_URL for migrations
 - **Fix**: Ensure both DATABASE_URL (port 6543) and DIRECT_URL (port 5432) are set
 
 ### Connection Errors
+
 - **Cause**: Using Direct connection on IPv4 network
 - **Fix**: Use Session/Transaction poolers (they support IPv4)
 
 ### "Can't reach database server"
+
 - **Cause**: Wrong connection string or network issues
 - **Fix**: Copy exact strings from Supabase dashboard
 
@@ -86,6 +94,7 @@ Visit http://localhost:3000 for API documentation.
 ## 🚀 Deployment
 
 ### Railway (Recommended)
+
 ```bash
 npm install -g @railway/cli
 railway login
@@ -94,12 +103,14 @@ railway up
 ```
 
 ### Docker
+
 ```bash
 docker build -t travel-email-parser .
 docker run -p 3000:3000 --env-file .env travel-email-parser
 ```
 
 ## 💰 Cost Estimate (1000 emails/month)
+
 - OpenAI API: $2-5
 - Supabase: $0 (free tier)
 - Hosting: $5-15

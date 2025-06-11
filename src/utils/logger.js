@@ -24,16 +24,14 @@ winston.addColors(colors);
 
 // Custom format for console output
 const consoleFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:SSS' }), // Fixed: Use SSS for milliseconds
   winston.format.colorize({ all: true }),
-  winston.format.printf(
-    (info) => `${info.timestamp} ${info.level}: ${info.message}`
-  )
+  winston.format.printf((info) => `${info.timestamp} ${info.level}: ${info.message}`)
 );
 
 // Custom format for file output
 const fileFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:SSS' }), // Fixed: Use SSS for milliseconds
   winston.format.errors({ stack: true }),
   winston.format.json()
 );
@@ -43,8 +41,8 @@ const transports = [
   // Console transport
   new winston.transports.Console({
     level: process.env.LOG_LEVEL || 'info',
-    format: consoleFormat
-  })
+    format: consoleFormat,
+  }),
 ];
 
 // Add file transports in production
