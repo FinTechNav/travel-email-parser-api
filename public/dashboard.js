@@ -9,7 +9,10 @@ let apiConfig = {
   baseUrl: '',
   apiKey: '',
   environment: 'local',
+  selectedUser: null,
 };
+
+let users = [];
 
 // Load saved configuration
 function loadConfig() {
@@ -20,9 +23,9 @@ function loadConfig() {
     apiConfig.environment = saved.environment;
   }
 
-  if (saved.apiKey) {
-    document.getElementById('apiKey').value = saved.apiKey;
-    apiConfig.apiKey = saved.apiKey;
+  if (saved.selectedUser) {
+    apiConfig.selectedUser = saved.selectedUser;
+    // Will be set after users are loaded
   }
 
   if (saved.customUrl) {
@@ -36,7 +39,7 @@ function loadConfig() {
 function saveConfig() {
   const config = {
     environment: apiConfig.environment,
-    apiKey: apiConfig.apiKey,
+    selectedUser: apiConfig.selectedUser,
   };
 
   if (apiConfig.environment === 'custom') {
@@ -64,6 +67,93 @@ function updateApiUrl() {
   }
 
   apiConfig.environment = environment;
+}
+
+// Load users from API
+async function loadUsers() {
+  try {
+    const response = await fetch(`${apiConfig.baseUrl}/auth/users`);
+    const result = await response.json();
+
+    if (result.success) {
+      users = result.data;
+      populateUserDropdown();
+    } else {
+      console.error('Failed to load users:', result.message);
+      updateUserDropdown('Error loading users');
+    }
+  } catch (error) {
+    console.error('Error loading users:', error);
+    updateUserDropdown('Error loading users');
+  }
+}
+
+// Populate user dropdown
+function populateUserDropdown() {
+  const select = document.getElementById('userSelect');
+  select.innerHTML = '<option value="">Select a user...</option>';
+
+  users.forEach((user) => {
+    const option = document.createElement('option');
+    option.value = user.id;
+    option.textContent = `${user.name} (${user.email})`;
+    option.dataset.user = JSON.stringify(user);
+    select.appendChild(option);
+  });
+
+  // Restore saved selection
+  if (apiConfig.selectedUser) {
+    const savedUser = users.find((u) => u.id === apiConfig.selectedUser);
+    if (savedUser) {
+      select.value = savedUser.id;
+      updateUserInfo(savedUser);
+    }
+  }
+}
+
+// Update user dropdown with message
+function updateUserDropdown(message) {
+  const select = document.getElementById('userSelect');
+  select.innerHTML = `<option value="">${message}</option>`;
+  hideUserInfo();
+}
+
+// Update user info display
+function updateUserInfo(user) {
+  if (!user) {
+    hideUserInfo();
+    return;
+  }
+
+  document.getElementById('userEmail').textContent = user.email;
+  document.getElementById('userName').textContent = user.name || 'N/A';
+  document.getElementById('userCreated').textContent = new Date(user.createdAt).toLocaleString();
+  document.getElementById('userApiKey').textContent = user.apiKey;
+  document.getElementById('userInfo').style.display = 'block';
+
+  // Update API config
+  apiConfig.apiKey = user.apiKey;
+  apiConfig.selectedUser = user.id;
+}
+
+// Hide user info
+function hideUserInfo() {
+  document.getElementById('userInfo').style.display = 'none';
+  apiConfig.apiKey = '';
+  apiConfig.selectedUser = null;
+}
+
+// Handle user selection
+function handleUserSelection() {
+  const select = document.getElementById('userSelect');
+  const selectedOption = select.options[select.selectedIndex];
+
+  if (selectedOption && selectedOption.dataset.user) {
+    const user = JSON.parse(selectedOption.dataset.user);
+    updateUserInfo(user);
+  } else {
+    hideUserInfo();
+  }
 }
 
 // Update status
@@ -254,19 +344,35 @@ async function loadItineraries() {
   }
 }
 
+// Refresh users list
+async function refreshUsers() {
+  updateUserDropdown('Refreshing users...');
+  updateApiUrl(); // Make sure API URL is current
+  await loadUsers();
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function () {
   // Handle environment change
-  document.getElementById('environment').addEventListener('change', updateApiUrl);
+  document.getElementById('environment').addEventListener('change', function () {
+    updateApiUrl();
+    refreshUsers(); // Reload users when environment changes
+  });
 
   // Handle custom URL change
   document.getElementById('customUrl').addEventListener('input', updateApiUrl);
+
+  // Handle user selection
+  document.getElementById('userSelect').addEventListener('change', handleUserSelection);
 
   // Handle form submission
   document.getElementById('configForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    apiConfig.apiKey = document.getElementById('apiKey').value.trim();
+    if (!apiConfig.apiKey) {
+      updateStatus('error', 'Please select a user first');
+      return;
+    }
 
     // Update API URL based on current selection
     updateApiUrl();
@@ -289,7 +395,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Initialize
   loadConfig();
-  if (apiConfig.baseUrl && apiConfig.apiKey) {
-    loadItineraries();
+
+  // Load users initially
+  if (apiConfig.baseUrl) {
+    refreshUsers();
   }
 });

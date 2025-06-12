@@ -10,18 +10,42 @@ const logger = require('../utils/logger');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+// GET /api/v1/auth/users - Get all users (for dashboard dropdown)
+router.get('/users', async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        apiKey: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    logger.error('Failed to fetch users:', error);
+    next(error);
+  }
+});
+
 // POST /api/v1/auth/register - Register new user
-router.post('/register',
+router.post(
+  '/register',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Valid email is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
     body('name')
       .isLength({ min: 2, max: 100 })
       .withMessage('Name must be between 2 and 100 characters'),
-    body('password')
-      .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters')
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   ],
   async (req, res, next) => {
     try {
@@ -30,7 +54,7 @@ router.post('/register',
         return res.status(400).json({
           success: false,
           message: 'Validation failed',
-          errors: errors.array()
+          errors: errors.array(),
         });
       }
 
@@ -38,13 +62,13 @@ router.post('/register',
 
       // Check if user already exists
       const existingUser = await prisma.user.findUnique({
-        where: { email }
+        where: { email },
       });
 
       if (existingUser) {
         return res.status(409).json({
           success: false,
-          message: 'User already exists with this email'
+          message: 'User already exists with this email',
         });
       }
 
@@ -57,23 +81,21 @@ router.post('/register',
           email,
           name,
           password: hashedPassword,
-          apiKey: uuidv4().replace(/-/g, '')
+          apiKey: uuidv4().replace(/-/g, ''),
         },
         select: {
           id: true,
           email: true,
           name: true,
           apiKey: true,
-          createdAt: true
-        }
+          createdAt: true,
+        },
       });
 
       // Generate JWT token
-      const token = jwt.sign(
-        { userId: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-      );
+      const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      });
 
       logger.info(`New user registered: ${email}`);
 
@@ -83,8 +105,8 @@ router.post('/register',
         data: {
           user,
           token,
-          expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-        }
+          expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        },
       });
     } catch (error) {
       logger.error('Registration failed:', error);
@@ -94,14 +116,11 @@ router.post('/register',
 );
 
 // POST /api/v1/auth/login - User login
-router.post('/login',
+router.post(
+  '/login',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Valid email is required'),
-    body('password')
-      .notEmpty()
-      .withMessage('Password is required')
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required'),
   ],
   async (req, res, next) => {
     try {
@@ -110,7 +129,7 @@ router.post('/login',
         return res.status(400).json({
           success: false,
           message: 'Validation failed',
-          errors: errors.array()
+          errors: errors.array(),
         });
       }
 
@@ -118,22 +137,20 @@ router.post('/login',
 
       // Find user with password
       const user = await prisma.user.findUnique({
-        where: { email }
+        where: { email },
       });
 
-      if (!user || !await bcrypt.compare(password, user.password)) {
+      if (!user || !(await bcrypt.compare(password, user.password))) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid email or password'
+          message: 'Invalid email or password',
         });
       }
 
       // Generate JWT token
-      const token = jwt.sign(
-        { userId: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-      );
+      const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+      });
 
       // Remove password from response
       const { password: _, ...userWithoutPassword } = user;
@@ -146,8 +163,8 @@ router.post('/login',
         data: {
           user: userWithoutPassword,
           token,
-          expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-        }
+          expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+        },
       });
     } catch (error) {
       logger.error('Login failed:', error);
@@ -157,37 +174,34 @@ router.post('/login',
 );
 
 // POST /api/v1/auth/refresh-api-key - Refresh API key
-router.post('/refresh-api-key',
-  require('../middleware/auth'),
-  async (req, res, next) => {
-    try {
-      const newApiKey = uuidv4().replace(/-/g, '');
+router.post('/refresh-api-key', require('../middleware/auth'), async (req, res, next) => {
+  try {
+    const newApiKey = uuidv4().replace(/-/g, '');
 
-      const updatedUser = await prisma.user.update({
-        where: { id: req.user.id },
-        data: { apiKey: newApiKey },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          apiKey: true
-        }
-      });
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { apiKey: newApiKey },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        apiKey: true,
+      },
+    });
 
-      logger.info(`API key refreshed for user: ${req.user.email}`);
+    logger.info(`API key refreshed for user: ${req.user.email}`);
 
-      res.json({
-        success: true,
-        message: 'API key refreshed successfully',
-        data: {
-          apiKey: updatedUser.apiKey
-        }
-      });
-    } catch (error) {
-      logger.error('API key refresh failed:', error);
-      next(error);
-    }
+    res.json({
+      success: true,
+      message: 'API key refreshed successfully',
+      data: {
+        apiKey: updatedUser.apiKey,
+      },
+    });
+  } catch (error) {
+    logger.error('API key refresh failed:', error);
+    next(error);
   }
-);
+});
 
 module.exports = router;
