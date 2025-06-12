@@ -1,12 +1,22 @@
-// src/middleware/requestLogger.js - Updated for custom logger
+// src/middleware/requestLogger.js - Fixed hrtime issue
 const morgan = require('morgan');
 const logger = require('../utils/logger');
 
-// Custom token for response time
+// Custom token for response time - FIXED VERSION
 morgan.token('response-time-ms', (req, res) => {
   if (!req._startTime) return '-';
-  const diff = process.hrtime(req._startTime);
-  return (diff[0] * 1000 + diff[1] * 1e-6).toFixed(2);
+
+  // Check if _startTime is an hrtime array or a Date
+  if (Array.isArray(req._startTime)) {
+    // If it's already an hrtime array, use it directly
+    const diff = process.hrtime(req._startTime);
+    return (diff[0] * 1000 + diff[1] * 1e-6).toFixed(2);
+  } else {
+    // If it's a Date object or timestamp, calculate difference manually
+    const now = Date.now();
+    const startTime = req._startTime instanceof Date ? req._startTime.getTime() : req._startTime;
+    return (now - startTime).toFixed(2);
+  }
 });
 
 // Custom token for user info
