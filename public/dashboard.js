@@ -1,24 +1,69 @@
+// Environment configuration
+const environments = {
+  local: 'http://localhost:3000/api/v1',
+  hosted: 'https://your-travel-parser.railway.app/api/v1', // Update this with your actual hosted URL
+  custom: '',
+};
+
 let apiConfig = {
   baseUrl: '',
   apiKey: '',
+  environment: 'local',
 };
 
 // Load saved configuration
 function loadConfig() {
   const saved = JSON.parse(localStorage.getItem('emailParserConfig') || '{}');
-  if (saved.baseUrl) {
-    document.getElementById('apiUrl').value = saved.baseUrl;
-    apiConfig.baseUrl = saved.baseUrl;
+
+  if (saved.environment) {
+    document.getElementById('environment').value = saved.environment;
+    apiConfig.environment = saved.environment;
   }
+
   if (saved.apiKey) {
     document.getElementById('apiKey').value = saved.apiKey;
     apiConfig.apiKey = saved.apiKey;
   }
+
+  if (saved.customUrl) {
+    document.getElementById('customUrl').value = saved.customUrl;
+  }
+
+  updateApiUrl();
 }
 
 // Save configuration
 function saveConfig() {
-  localStorage.setItem('emailParserConfig', JSON.stringify(apiConfig));
+  const config = {
+    environment: apiConfig.environment,
+    apiKey: apiConfig.apiKey,
+  };
+
+  if (apiConfig.environment === 'custom') {
+    config.customUrl = document.getElementById('customUrl').value;
+  }
+
+  localStorage.setItem('emailParserConfig', JSON.stringify(config));
+}
+
+// Update API URL based on environment selection
+function updateApiUrl() {
+  const environment = document.getElementById('environment').value;
+  const customUrlGroup = document.getElementById('customUrlGroup');
+  const currentUrlSpan = document.getElementById('currentUrl');
+
+  if (environment === 'custom') {
+    customUrlGroup.style.display = 'block';
+    const customUrl = document.getElementById('customUrl').value;
+    apiConfig.baseUrl = customUrl || '';
+    currentUrlSpan.textContent = customUrl || 'Please enter custom URL';
+  } else {
+    customUrlGroup.style.display = 'none';
+    apiConfig.baseUrl = environments[environment];
+    currentUrlSpan.textContent = environments[environment];
+  }
+
+  apiConfig.environment = environment;
 }
 
 // Update status
@@ -74,18 +119,6 @@ function formatDateRange(startDate, endDate) {
   const end = new Date(endDate);
 
   return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-}
-
-// Get segment type color
-function getSegmentTypeColor(type) {
-  const colors = {
-    flight: '#007bff',
-    hotel: '#28a745',
-    car_rental: '#ffc107',
-    train: '#6f42c1',
-    other: '#6c757d',
-  };
-  return colors[type] || colors.other;
 }
 
 // Render segment
@@ -223,16 +256,24 @@ async function loadItineraries() {
 
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', function () {
+  // Handle environment change
+  document.getElementById('environment').addEventListener('change', updateApiUrl);
+
+  // Handle custom URL change
+  document.getElementById('customUrl').addEventListener('input', updateApiUrl);
+
   // Handle form submission
   document.getElementById('configForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    apiConfig.baseUrl = document.getElementById('apiUrl').value.trim();
     apiConfig.apiKey = document.getElementById('apiKey').value.trim();
 
-    // Remove trailing slash from URL
-    if (apiConfig.baseUrl.endsWith('/')) {
-      apiConfig.baseUrl = apiConfig.baseUrl.slice(0, -1);
+    // Update API URL based on current selection
+    updateApiUrl();
+
+    if (!apiConfig.baseUrl) {
+      updateStatus('error', 'Please enter a valid API URL');
+      return;
     }
 
     saveConfig();

@@ -407,13 +407,47 @@
         <form id="configForm">
           <div class="form-row">
             <div class="form-group">
-              <label for="apiUrl">API Base URL:</label>
-              <input type="url" id="apiUrl" placeholder="https://your-api.com/api/v1" required />
+              <label for="environment">Environment:</label>
+              <select
+                id="environment"
+                style="
+                  width: 100%;
+                  padding: 12px 16px;
+                  border: 2px solid #e9ecef;
+                  border-radius: 12px;
+                  font-size: 1rem;
+                  transition:
+                    border-color 0.3s ease,
+                    box-shadow 0.3s ease;
+                "
+              >
+                <option value="local">Local Development</option>
+                <option value="hosted">Production (Hosted)</option>
+                <option value="custom">Custom URL</option>
+              </select>
             </div>
             <div class="form-group">
               <label for="apiKey">API Key:</label>
               <input type="text" id="apiKey" placeholder="your-api-key-here" required />
             </div>
+          </div>
+          <div class="form-group" id="customUrlGroup" style="display: none">
+            <label for="customUrl">Custom API URL:</label>
+            <input type="url" id="customUrl" placeholder="https://your-custom-api.com/api/v1" />
+          </div>
+          <div
+            class="current-url"
+            style="
+              background: #f8f9fa;
+              padding: 12px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+              font-family: monospace;
+              font-size: 0.9rem;
+              color: #495057;
+            "
+          >
+            <strong>Current URL:</strong> <span id="currentUrl">http://localhost:3000/api/v1</span>
           </div>
           <button type="submit" class="btn">🔄 Connect & Load Results</button>
         </form>
