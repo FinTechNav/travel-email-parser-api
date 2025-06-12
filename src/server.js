@@ -45,8 +45,16 @@ const server = app.listen(PORT, () => {
   logger.info(`🔍 Health Check: http://localhost:${PORT}/api/v1/health`);
 
   // Start email polling after server is ready
-  setTimeout(() => {
-    emailPoller.startPolling(2); // Poll every 2 minutes
+  setTimeout(async () => {
+    try {
+      logger.info('🔍 Debug: About to start email polling...');
+      await emailPoller.startPolling(2);
+      logger.info('✅ Email polling started successfully');
+    } catch (error) {
+      logger.error('❌ Failed to start email polling:', error);
+      logger.error('Stack trace:', error.stack);
+      // Don't exit - let the API continue running even if email polling fails
+    }
   }, 5000); // Wait 5 seconds for server to fully initialize
 });
 

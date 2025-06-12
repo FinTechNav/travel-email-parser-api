@@ -202,49 +202,73 @@ class EmailPoller {
     }
   }
 
+  // In src/services/emailPoller.js, find the startPolling method and replace it with this:
+
   async startPolling(intervalMinutes = 2) {
-    if (this.isPolling) {
-      logger.info('📧 Email polling already running');
-      return;
-    }
+    try {
+      logger.info('🔍 Debug: Starting EmailPoller initialization...');
 
-    if (!this.imapConfig.user || !this.imapConfig.password) {
-      logger.warn(
-        '⚠️  Email polling disabled: Missing PARSE_EMAIL_ADDRESS or PARSE_EMAIL_PASSWORD'
-      );
-      logger.info('💡 Add email credentials to .env to enable automatic email parsing');
-      logger.info('⌨️  You can still use manual controls - press H for help');
+      if (this.isPolling) {
+        logger.info('📧 Email polling already running');
+        return;
+      }
+
+      if (!this.imapConfig.user || !this.imapConfig.password) {
+        logger.warn(
+          '⚠️  Email polling disabled: Missing PARSE_EMAIL_ADDRESS or PARSE_EMAIL_PASSWORD'
+        );
+        logger.info('💡 Add email credentials to .env to enable automatic email parsing');
+        logger.info('⌨️  You can still use manual controls - press H for help');
+        this.setupKeyboardListener();
+        return;
+      }
+
+      this.isPolling = true;
+      logger.info(`📧 Starting email polling every ${intervalMinutes} minutes`);
+      logger.info(`📬 Monitoring: ${this.imapConfig.user}`);
+
+      // Setup keyboard controls
+      logger.info('🔍 Debug: Setting up keyboard controls...');
       this.setupKeyboardListener();
-      return;
+
+      // Clean up old records on startup
+      logger.info('🔍 Debug: Cleaning up old records...');
+      await this.cleanupOldRecords();
+
+      // Poll immediately, then set interval
+      logger.info('🔍 Debug: Starting initial poll...');
+      await this.pollForEmails();
+
+      logger.info('🔍 Debug: Setting up polling interval...');
+      this.pollingInterval = setInterval(
+        async () => {
+          try {
+            await this.pollForEmails();
+          } catch (error) {
+            logger.error('❌ Error in polling interval:', error);
+          }
+        },
+        intervalMinutes * 60 * 1000
+      );
+
+      // Clean up old records daily
+      setInterval(
+        async () => {
+          try {
+            await this.cleanupOldRecords();
+          } catch (error) {
+            logger.error('❌ Error in cleanup interval:', error);
+          }
+        },
+        24 * 60 * 60 * 1000 // 24 hours
+      );
+
+      logger.info('✅ EmailPoller startup completed successfully');
+    } catch (error) {
+      logger.error('❌ Fatal error in EmailPoller startup:', error);
+      this.stopPolling();
+      throw error; // Re-throw to let the caller handle it
     }
-
-    this.isPolling = true;
-    logger.info(`📧 Starting email polling every ${intervalMinutes} minutes`);
-    logger.info(`📬 Monitoring: ${this.imapConfig.user}`);
-
-    // Setup keyboard controls
-    this.setupKeyboardListener();
-
-    // Clean up old records on startup
-    await this.cleanupOldRecords();
-
-    // Poll immediately, then set interval
-    await this.pollForEmails();
-
-    this.pollingInterval = setInterval(
-      async () => {
-        await this.pollForEmails();
-      },
-      intervalMinutes * 60 * 1000
-    );
-
-    // Clean up old records daily
-    setInterval(
-      async () => {
-        await this.cleanupOldRecords();
-      },
-      24 * 60 * 60 * 1000 // 24 hours
-    );
   }
 
   stopPolling() {
