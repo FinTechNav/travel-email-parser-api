@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -17,8 +20,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  itineraries Itinerary[]
-  usage       ApiUsage[]
+  // Relationships
+  itineraries     Itinerary[]
+  usage           ApiUsage[]
+  processedEmails ProcessedEmail[]
   
   @@map("users")
 }
@@ -33,39 +38,75 @@ model Itinerary {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  user     User      @relation(fields: [userId], references: [id])
+  // Relationships
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   segments Segment[]
   
   @@map("itineraries")
+  @@index([userId])
+  @@index([startDate])
 }
 
 model Segment {
-  id               String    @id @default(cuid())
-  itineraryId      String
-  type             String
+  id                 String    @id @default(cuid())
+  itineraryId        String
+  type               String    // flight, hotel, car_rental, train, cruise, restaurant, event
   confirmationNumber String?
-  startDateTime    DateTime?
-  endDateTime      DateTime?
-  origin           String?
-  destination      String?
-  details          Json?
-  rawEmail         String?
-  parsedAt         DateTime  @default(now())
+  startDateTime      DateTime?
+  endDateTime        DateTime?
+  origin             String?
+  destination        String?
+  details            Json?     // Flexible storage for type-specific data
+  rawEmail           String?   // Store original email content for debugging
+  parsedAt           DateTime  @default(now())
   
-  itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+  // Relationships
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
   
   @@map("segments")
+  @@index([itineraryId])
+  @@index([type])
+  @@index([startDateTime])
+  @@index([confirmationNumber])
 }
 
 model ApiUsage {
-  id          String   @id @default(cuid())
-  userId      String
-  endpoint    String
-  requestsCount Int    @default(1)
-  date        DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String
+  endpoint      String   // parse_email, parse_batch, etc.
+  requestsCount Int      @default(1)
+  date          DateTime @default(now())
   
-  user User @relation(fields: [userId], references: [id])
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([userId, endpoint, date])
   @@map("api_usage")
+  @@index([userId])
+  @@index([date])
+}
+
+// NEW: Email processing tracking to prevent duplicates
+model ProcessedEmail {
+  id            String   @id @default(cuid())
+  emailHash     String   @unique  // SHA256 hash of email content for deduplication
+  messageId     String?  // Email message ID (can be null for some emails)
+  subject       String?  // Email subject line (truncated to 255 chars)
+  fromAddress   String?  // Sender email address
+  userId        String   // User who processed this email
+  processedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  success       Boolean  @default(false) // Whether processing was successful
+  source        String   @default("email_polling") // email_polling, api, manual, etc.
+  
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("processed_emails")
+  @@index([messageId])
+  @@index([userId])
+  @@index([processedAt])
+  @@index([success])
+  @@index([emailHash, messageId]) // Composite index for fast duplicate checking
+  @@index([userId, processedAt])   // For user-specific queries
 }

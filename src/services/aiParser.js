@@ -1,4 +1,5 @@
-// src/services/aiParser.js
+// src/services/aiParser.js - Fixed version with robust JSON parsing
+
 const OpenAI = require('openai');
 const logger = require('../utils/logger');
 
@@ -7,7 +8,7 @@ class AIParser {
     this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
-    this.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+    this.model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     this.maxTokens = parseInt(process.env.AI_MAX_TOKENS) || 1500;
     this.temperature = parseFloat(process.env.AI_TEMPERATURE) || 0.1;
   }
@@ -35,7 +36,7 @@ class AIParser {
         model: this.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 10
+        max_tokens: 10,
       });
 
       const classification = response.choices[0].message.content.trim().toLowerCase();
@@ -55,19 +56,29 @@ class AIParser {
         model: this.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: this.temperature,
-        max_tokens: this.maxTokens
+        max_tokens: this.maxTokens,
+        response_format: { type: 'json_object' }, // Force JSON response
       });
 
-      const content = response.choices[0].message.content;
-      logger.debug(`AI response: ${content}`);
+      const content = response.choices[0].message.content.trim();
+      logger.debug(`AI response length: ${content.length} characters`);
 
-      // Parse JSON response
+      // Parse JSON response with better error handling
       let parsedData;
       try {
-        parsedData = JSON.parse(content);
+        parsedData = this.parseJsonResponse(content);
       } catch (jsonError) {
-        logger.error('Failed to parse AI response as JSON:', jsonError);
-        throw new Error('Invalid JSON response from AI service');
+        logger.error('Failed to parse AI response as JSON:', jsonError.message);
+        logger.error('Raw AI response:', content);
+
+        // Try to extract JSON from the response
+        const extractedJson = this.extractJsonFromResponse(content);
+        if (extractedJson) {
+          parsedData = extractedJson;
+          logger.info('Successfully extracted JSON from mixed response');
+        } else {
+          throw new Error('Invalid JSON response from AI service');
+        }
       }
 
       logger.info(`Successfully parsed ${emailType} email`);
@@ -78,9 +89,41 @@ class AIParser {
     }
   }
 
+  parseJsonResponse(content) {
+    // Try direct JSON parsing first
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      // If that fails, try to clean the content
+      const cleaned = content
+        .replace(/```json\s*/g, '') // Remove JSON code block markers
+        .replace(/```\s*/g, '') // Remove closing code block markers
+        .replace(/^\s*/, '') // Remove leading whitespace
+        .replace(/\s*$/, '') // Remove trailing whitespace
+        .replace(/,\s*}/g, '}') // Remove trailing commas
+        .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+
+      return JSON.parse(cleaned);
+    }
+  }
+
+  extractJsonFromResponse(content) {
+    try {
+      // Look for JSON object in the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return this.parseJsonResponse(jsonMatch[0]);
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   createParsingPrompt(emailContent, emailType) {
     const basePrompt = `
     You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
+    You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
     
     IMPORTANT RULES:
     1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
@@ -114,7 +157,7 @@ class AIParser {
     `;
 
     let specificPrompt = '';
-    
+
     switch (emailType) {
       case 'flight':
         specificPrompt = `
@@ -132,7 +175,7 @@ class AIParser {
         }
         `;
         break;
-      
+
       case 'hotel':
         specificPrompt = `
         For hotels, also extract in the details object:
@@ -149,7 +192,7 @@ class AIParser {
         }
         `;
         break;
-      
+
       case 'car_rental':
         specificPrompt = `
         For car rentals, also extract in the details object:
@@ -166,102 +209,29 @@ class AIParser {
         }
         `;
         break;
-      
-      case 'train':
-        specificPrompt = `
-        For trains, also extract in the details object:
-        {
-          "train_operator": "operator name",
-          "train_number": "train number",
-          "coach": "coach number",
-          "seat": "seat number",
-          "platform": "departure platform",
-          "class": "first/second/etc",
-          "route": "route description"
-        }
-        `;
-        break;
-      
+
       default:
         specificPrompt = `
         Extract any relevant details in the details object based on the email type.
         `;
+        break;
     }
 
-    return basePrompt + specificPrompt + `\n\nEmail content:\n${emailContent}\n\nRespond only with valid JSON:`;
+    return `${basePrompt}\n${specificPrompt}\n\nEmail content to parse:\n${emailContent}`;
   }
 
-  async enhanceWithAI(parsedData) {
-    try {
-      if (!parsedData.details || Object.keys(parsedData.details).length === 0) {
-        return parsedData;
-      }
-
-      const prompt = `
-      Enhance this travel data with additional insights. Add helpful information like:
-      - Airport codes for cities
-      - Time zone information
-      - Travel duration estimates
-      - Helpful tips for the destination
-      
-      Current data: ${JSON.stringify(parsedData, null, 2)}
-      
-      Return the enhanced data as JSON with additional "enhancements" object:
-      `;
-
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 800
-      });
-
-      const enhanced = JSON.parse(response.choices[0].message.content);
-      return { ...parsedData, ...enhanced };
-    } catch (error) {
-      logger.warn('Enhancement failed, returning original data:', error);
-      return parsedData;
-    }
-  }
-
-  async batchParse(emails) {
-    const results = [];
-    
-    for (const email of emails) {
-      try {
-        const type = await this.classifyEmail(email.content);
-        const parsed = await this.parseEmail(email.content, type);
-        results.push({
-          id: email.id,
-          success: true,
-          data: parsed,
-          type
-        });
-      } catch (error) {
-        results.push({
-          id: email.id,
-          success: false,
-          error: error.message
-        });
-      }
-    }
-    
-    return results;
-  }
-
-  // Health check for AI service
   async healthCheck() {
     try {
       const response = await this.client.chat.completions.create({
         model: this.model,
-        messages: [{ role: 'user', content: 'Reply with "OK"' }],
-        max_tokens: 5,
-        temperature: 0
+        messages: [{ role: 'user', content: 'Respond with just the word "healthy"' }],
+        max_tokens: 10,
+        temperature: 0,
       });
-      
-      return response.choices[0].message.content.includes('OK');
+
+      return response.choices[0].message.content.trim().toLowerCase().includes('healthy');
     } catch (error) {
-      logger.error('AI service health check failed:', error);
+      logger.error('AI health check failed:', error);
       return false;
     }
   }

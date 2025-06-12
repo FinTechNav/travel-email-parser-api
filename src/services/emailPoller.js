@@ -1,9 +1,10 @@
-// src/services/emailPoller.js - Complete implementation
+// src/services/emailPoller.js - Enhanced with duplicate prevention
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 
 class EmailPoller {
@@ -12,6 +13,7 @@ class EmailPoller {
     this.prisma = new PrismaClient();
     this.isPolling = false;
     this.pollingInterval = null;
+    this.keyboardListenerActive = false;
 
     // IMAP configuration for Zoho
     this.imapConfig = {
@@ -26,6 +28,180 @@ class EmailPoller {
     };
   }
 
+  /**
+   * Generate a unique hash for email content to prevent duplicates
+   */
+  generateEmailHash(messageId, subject, from, content) {
+    // Create a hash based on multiple email attributes
+    const hashInput = `${messageId || ''}|${subject || ''}|${from || ''}|${content.substring(0, 500)}`;
+    return crypto.createHash('sha256').update(hashInput).digest('hex');
+  }
+
+  /**
+   * Check if email has already been processed
+   */
+  async isEmailProcessed(emailHash, messageId) {
+    try {
+      // Check both by hash and messageId for redundancy
+      const existing = await this.prisma.processedEmail.findFirst({
+        where: {
+          OR: [{ emailHash }, { messageId: messageId || null }],
+        },
+      });
+
+      return !!existing;
+    } catch (error) {
+      logger.error('❌ Error checking processed emails:', error);
+      return false; // If we can't check, allow processing (better than blocking)
+    }
+  }
+
+  /**
+   * Mark email as processed in database
+   */
+  async markEmailProcessed(emailHash, messageId, subject, from, userId, success = true) {
+    try {
+      await this.prisma.processedEmail.create({
+        data: {
+          emailHash,
+          messageId,
+          subject: subject?.substring(0, 255) || 'No Subject',
+          fromAddress: from?.substring(0, 255),
+          userId,
+          processedAt: new Date(),
+          success,
+          source: 'email_polling',
+        },
+      });
+
+      logger.debug(`✅ Marked email as processed: ${emailHash.substring(0, 8)}...`);
+    } catch (error) {
+      // If it's a unique constraint error, that's fine - email was already marked
+      if (error.code !== 'P2002') {
+        logger.error('❌ Error marking email as processed:', error);
+      }
+    }
+  }
+
+  /**
+   * Setup keyboard listener for manual polling
+   */
+  setupKeyboardListener() {
+    if (this.keyboardListenerActive) {
+      return;
+    }
+
+    // Enable raw mode to capture single key presses
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+
+      process.stdin.on('data', (key) => {
+        // Handle different key presses
+        switch (key) {
+          case 'p':
+          case 'P':
+            logger.info('⌨️  Manual poll triggered by keypress');
+            this.pollForEmails().catch((error) => {
+              logger.error('❌ Manual poll failed:', error.message);
+            });
+            break;
+
+          case 's':
+          case 'S':
+            this.showStatus();
+            break;
+
+          case 'c':
+          case 'C':
+            this.cleanupOldRecords()
+              .then(() => {
+                logger.info('🧹 Manual cleanup completed');
+              })
+              .catch((error) => {
+                logger.error('❌ Manual cleanup failed:', error.message);
+              });
+            break;
+
+          case 'h':
+          case 'H':
+          case '?':
+            this.showHelp();
+            break;
+
+          case '\u0003': // Ctrl+C
+            logger.info('👋 Shutting down email poller...');
+            this.stopPolling();
+            process.exit(0);
+            break;
+
+          case 'q':
+          case 'Q':
+            logger.info('👋 Shutting down email poller...');
+            this.stopPolling();
+            process.exit(0);
+            break;
+        }
+      });
+
+      this.keyboardListenerActive = true;
+      this.showHelp();
+    } else {
+      logger.warn('⚠️  TTY not available - keyboard controls disabled');
+    }
+  }
+
+  /**
+   * Show current poller status
+   */
+  async showStatus() {
+    try {
+      const totalProcessed = await this.prisma.processedEmail.count();
+      const successfulToday = await this.prisma.processedEmail.count({
+        where: {
+          success: true,
+          processedAt: {
+            gte: new Date(new Date().setHours(0, 0, 0, 0)),
+          },
+        },
+      });
+
+      logger.info(`📊 Email Poller Status:`);
+      logger.info(`   • Status: ${this.isPolling ? '🟢 Running' : '🔴 Stopped'}`);
+      logger.info(`   • Total emails processed: ${totalProcessed}`);
+      logger.info(`   • Successful today: ${successfulToday}`);
+      logger.info(`   • Monitoring: ${this.imapConfig.user || 'Not configured'}`);
+      logger.info(`   • Next poll: ${this.isPolling ? 'Every 2 minutes' : 'Manual only'}`);
+    } catch (error) {
+      logger.error('❌ Failed to get status:', error.message);
+    }
+  }
+
+  /**
+   * Clean up old processed email records (older than 30 days)
+   */
+  async cleanupOldRecords() {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const deleted = await this.prisma.processedEmail.deleteMany({
+        where: {
+          processedAt: {
+            lt: thirtyDaysAgo,
+          },
+        },
+      });
+
+      if (deleted.count > 0) {
+        logger.info(`🧹 Cleaned up ${deleted.count} old processed email records`);
+      }
+    } catch (error) {
+      logger.error('❌ Error cleaning up old records:', error);
+    }
+  }
+
   async startPolling(intervalMinutes = 2) {
     if (this.isPolling) {
       logger.info('📧 Email polling already running');
@@ -37,12 +213,20 @@ class EmailPoller {
         '⚠️  Email polling disabled: Missing PARSE_EMAIL_ADDRESS or PARSE_EMAIL_PASSWORD'
       );
       logger.info('💡 Add email credentials to .env to enable automatic email parsing');
+      logger.info('⌨️  You can still use manual controls - press H for help');
+      this.setupKeyboardListener();
       return;
     }
 
     this.isPolling = true;
     logger.info(`📧 Starting email polling every ${intervalMinutes} minutes`);
     logger.info(`📬 Monitoring: ${this.imapConfig.user}`);
+
+    // Setup keyboard controls
+    this.setupKeyboardListener();
+
+    // Clean up old records on startup
+    await this.cleanupOldRecords();
 
     // Poll immediately, then set interval
     await this.pollForEmails();
@@ -53,6 +237,14 @@ class EmailPoller {
       },
       intervalMinutes * 60 * 1000
     );
+
+    // Clean up old records daily
+    setInterval(
+      async () => {
+        await this.cleanupOldRecords();
+      },
+      24 * 60 * 60 * 1000 // 24 hours
+    );
   }
 
   stopPolling() {
@@ -61,6 +253,14 @@ class EmailPoller {
       this.pollingInterval = null;
     }
     this.isPolling = false;
+
+    // Cleanup keyboard listener
+    if (this.keyboardListenerActive && process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+      this.keyboardListenerActive = false;
+    }
+
     logger.info('📧 Email polling stopped');
   }
 
@@ -158,7 +358,7 @@ class EmailPoller {
     return new Promise((resolve, reject) => {
       const fetch = imap.fetch(messageIds, {
         bodies: '',
-        markSeen: false, // Don't mark as read until processed
+        markSeen: false, // Don't mark as read until we verify processing
       });
 
       const processedEmails = [];
@@ -168,10 +368,19 @@ class EmailPoller {
           try {
             const parsed = await simpleParser(stream);
             const result = await this.processEmail(parsed, seqno);
-            processedEmails.push({ seqno, success: !!result });
+            processedEmails.push({
+              seqno,
+              success: !!result,
+              messageId: parsed.messageId,
+            });
           } catch (error) {
             logger.error(`❌ Error processing email ${seqno}:`, error.message);
-            processedEmails.push({ seqno, success: false, error: error.message });
+            processedEmails.push({
+              seqno,
+              success: false,
+              error: error.message,
+              messageId: null,
+            });
           }
         });
       });
@@ -196,8 +405,21 @@ class EmailPoller {
             resolve(processedEmails);
           });
         } else {
-          imap.end();
-          resolve(processedEmails);
+          // Even if no emails were successfully processed, mark them as seen
+          // to prevent infinite retry loops for permanently broken emails
+          const allEmails = processedEmails.map((e) => e.seqno);
+          if (allEmails.length > 0) {
+            imap.addFlags(allEmails, '\\Seen', (err) => {
+              if (err) {
+                logger.error('❌ Error marking failed emails as read:', err);
+              }
+              imap.end();
+              resolve(processedEmails);
+            });
+          } else {
+            imap.end();
+            resolve(processedEmails);
+          }
         }
       });
     });
@@ -209,13 +431,12 @@ class EmailPoller {
       const subject = parsed.subject || 'No Subject';
       const text = parsed.text;
       const html = parsed.html;
+      const messageId = parsed.messageId;
 
       if (!from) {
         logger.warn(`⚠️  Skipping email ${seqno}: missing sender address`);
         return null;
       }
-
-      logger.info(`📧 Processing email from ${from}: "${subject}"`);
 
       // Use HTML content if available, otherwise plain text
       const emailContent = html || text;
@@ -225,6 +446,19 @@ class EmailPoller {
         return null;
       }
 
+      // Generate unique hash for this email
+      const emailHash = this.generateEmailHash(messageId, subject, from, emailContent);
+
+      // Check if this email has already been processed
+      const alreadyProcessed = await this.isEmailProcessed(emailHash, messageId);
+
+      if (alreadyProcessed) {
+        logger.info(`🔄 Skipping already processed email from ${from}: "${subject}"`);
+        return { status: 'skipped', reason: 'already_processed' };
+      }
+
+      logger.info(`📧 Processing email from ${from}: "${subject}"`);
+
       // Auto-create or find user based on sender email
       let user = await this.prisma.user.findUnique({ where: { email: from } });
 
@@ -233,23 +467,50 @@ class EmailPoller {
         logger.info(`👤 Auto-created user for: ${from}`);
       }
 
-      // Process the email with your travel parser
-      const result = await this.emailProcessor.processEmail({
-        content: emailContent,
-        userEmail: from,
-        userId: user.id,
-        metadata: {
-          source: 'email_polling',
-          subject,
-          receivedAt: new Date().toISOString(),
-          messageId: parsed.messageId,
-          to: 'trips@fintechnav.com',
-        },
-      });
+      // Mark as processing (before actual processing to prevent race conditions)
+      await this.markEmailProcessed(emailHash, messageId, subject, from, user.id, false);
 
-      logger.info(
-        `✅ Successfully parsed email from ${from}: ${result.type} detected (${result.confidence * 100}% confidence)`
-      );
+      let processingSuccess = false;
+      let result = null;
+
+      try {
+        // Process the email with your travel parser
+        result = await this.emailProcessor.processEmail({
+          content: emailContent,
+          userEmail: from,
+          userId: user.id,
+          metadata: {
+            source: 'email_polling',
+            subject,
+            receivedAt: new Date().toISOString(),
+            messageId,
+            to: 'trips@fintechnav.com',
+            emailHash, // Include hash for additional tracking
+          },
+        });
+
+        processingSuccess = true;
+
+        logger.info(
+          `✅ Successfully parsed email from ${from}: ${result.type} detected (${(result.confidence * 100).toFixed(1)}% confidence)`
+        );
+
+        // Update the processed record to mark as successful
+        await this.prisma.processedEmail.update({
+          where: { emailHash },
+          data: {
+            success: true,
+            updatedAt: new Date(),
+          },
+        });
+      } catch (processingError) {
+        logger.error(`❌ Error processing email content for ${from}:`, processingError.message);
+
+        // Keep the record marked as unsuccessful (success: false)
+        // This prevents reprocessing but allows manual review
+
+        return null;
+      }
 
       return result;
     } catch (error) {
@@ -299,6 +560,30 @@ class EmailPoller {
       });
     } catch (error) {
       throw error;
+    }
+  }
+
+  // Manual method to reprocess failed emails (for debugging)
+  async reprocessFailedEmails(limit = 10) {
+    try {
+      const failedEmails = await this.prisma.processedEmail.findMany({
+        where: { success: false },
+        orderBy: { processedAt: 'desc' },
+        take: limit,
+      });
+
+      logger.info(`🔄 Found ${failedEmails.length} failed emails to potentially reprocess`);
+
+      for (const failedEmail of failedEmails) {
+        logger.info(
+          `🔄 Consider manual review for: ${failedEmail.subject} from ${failedEmail.fromAddress}`
+        );
+      }
+
+      return failedEmails;
+    } catch (error) {
+      logger.error('❌ Error fetching failed emails:', error);
+      return [];
     }
   }
 }
