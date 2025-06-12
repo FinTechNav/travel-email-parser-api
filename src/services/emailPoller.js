@@ -86,72 +86,97 @@ class EmailPoller {
   /**
    * Setup keyboard listener for manual polling
    */
+
+  // Replace the setupKeyboardListener method in your emailPoller.js with this debug version:
+
   setupKeyboardListener() {
-    if (this.keyboardListenerActive) {
-      return;
-    }
+    try {
+      logger.info('🔍 Debug: Checking if keyboard listener is already active...');
+      if (this.keyboardListenerActive) {
+        logger.info('🔍 Debug: Keyboard listener already active, returning');
+        return;
+      }
 
-    // Enable raw mode to capture single key presses
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-      process.stdin.setEncoding('utf8');
+      logger.info('🔍 Debug: Checking TTY availability...');
+      logger.info(`🔍 Debug: process.stdin.isTTY = ${process.stdin.isTTY}`);
 
-      process.stdin.on('data', (key) => {
-        // Handle different key presses
-        switch (key) {
-          case 'p':
-          case 'P':
-            logger.info('⌨️  Manual poll triggered by keypress');
-            this.pollForEmails().catch((error) => {
-              logger.error('❌ Manual poll failed:', error.message);
-            });
-            break;
+      // Enable raw mode to capture single key presses
+      if (process.stdin.isTTY) {
+        logger.info('🔍 Debug: Setting raw mode...');
+        process.stdin.setRawMode(true);
 
-          case 's':
-          case 'S':
-            this.showStatus();
-            break;
+        logger.info('🔍 Debug: Resuming stdin...');
+        process.stdin.resume();
 
-          case 'c':
-          case 'C':
-            this.cleanupOldRecords()
-              .then(() => {
-                logger.info('🧹 Manual cleanup completed');
-              })
-              .catch((error) => {
-                logger.error('❌ Manual cleanup failed:', error.message);
-              });
-            break;
+        logger.info('🔍 Debug: Setting encoding...');
+        process.stdin.setEncoding('utf8');
 
-          case 'h':
-          case 'H':
-          case '?':
-            this.showHelp();
-            break;
+        logger.info('🔍 Debug: Adding data listener...');
+        process.stdin.on('data', (key) => {
+          try {
+            // Handle different key presses
+            switch (key) {
+              case 'p':
+              case 'P':
+                logger.info('⌨️  Manual poll triggered by keypress');
+                this.pollForEmails().catch((error) => {
+                  logger.error('❌ Manual poll failed:', error.message);
+                });
+                break;
 
-          case '\u0003': // Ctrl+C
-            logger.info('👋 Shutting down email poller...');
-            this.stopPolling();
-            process.exit(0);
-            break;
+              case 's':
+              case 'S':
+                this.showStatus();
+                break;
 
-          case 'q':
-          case 'Q':
-            logger.info('👋 Shutting down email poller...');
-            this.stopPolling();
-            process.exit(0);
-            break;
-        }
-      });
+              case 'c':
+              case 'C':
+                this.cleanupOldRecords()
+                  .then(() => {
+                    logger.info('🧹 Manual cleanup completed');
+                  })
+                  .catch((error) => {
+                    logger.error('❌ Manual cleanup failed:', error.message);
+                  });
+                break;
 
-      this.keyboardListenerActive = true;
-      this.showHelp();
-    } else {
-      logger.warn('⚠️  TTY not available - keyboard controls disabled');
+              case 'h':
+              case 'H':
+              case '?':
+                this.showHelp();
+                break;
+
+              case '\u0003': // Ctrl+C
+                logger.info('👋 Shutting down email poller...');
+                this.stopPolling();
+                process.exit(0);
+                break;
+
+              case 'q':
+              case 'Q':
+                logger.info('👋 Shutting down email poller...');
+                this.stopPolling();
+                process.exit(0);
+                break;
+            }
+          } catch (error) {
+            logger.error('❌ Error in keyboard handler:', error);
+          }
+        });
+
+        this.keyboardListenerActive = true;
+        logger.info('🔍 Debug: About to show help...');
+        this.showHelp();
+        logger.info('🔍 Debug: Keyboard listener setup completed successfully');
+      } else {
+        logger.warn('⚠️  TTY not available - keyboard controls disabled');
+      }
+    } catch (error) {
+      logger.error('❌ Error in setupKeyboardListener:', error);
+      logger.error('Stack trace:', error.stack);
+      throw error; // Re-throw the error so we can see it in the startup logs
     }
   }
-
   /**
    * Show current poller status
    */
