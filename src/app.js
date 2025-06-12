@@ -25,19 +25,21 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.ALLOWED_ORIGINS?.split(',') 
-    : true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === 'production' ? process.env.ALLOWED_ORIGINS?.split(',') : true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    credentials: true,
+  })
+);
 
 // Compression
 app.use(compression());
@@ -51,7 +53,7 @@ const limiter = rateLimit({
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   message: {
     error: 'Too many requests from this IP, please try again later.',
-    retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000) / 1000)
+    retryAfter: Math.ceil((parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000) / 1000),
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -60,18 +62,24 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Body parsing middleware
-app.use(express.json({ 
-  limit: process.env.MAX_FILE_SIZE || '10mb',
-  verify: (req, res, buf, encoding) => {
-    // Store raw body for webhook signature verification
-    req.rawBody = buf;
-  }
-}));
+app.use(
+  express.json({
+    limit: process.env.MAX_FILE_SIZE || '10mb',
+    verify: (req, res, buf, encoding) => {
+      // Store raw body for webhook signature verification
+      req.rawBody = buf;
+    },
+  })
+);
 
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: process.env.MAX_FILE_SIZE || '10mb' 
-}));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: process.env.MAX_FILE_SIZE || '10mb',
+  })
+);
+
+app.use(express.static(path.join(__dirname, '../public')));
 
 // API routes
 app.use('/api/v1/health', healthRoutes);
@@ -91,8 +99,8 @@ app.get('/', (req, res) => {
       health: '/api/v1/health',
       parse: '/api/v1/parse/email',
       itineraries: '/api/v1/parse/itineraries',
-      webhooks: '/api/v1/webhooks'
-    }
+      webhooks: '/api/v1/webhooks',
+    },
   });
 });
 
@@ -104,8 +112,8 @@ app.use('*', (req, res) => {
     availableEndpoints: {
       health: '/api/v1/health',
       parse: '/api/v1/parse/email',
-      docs: '/docs'
-    }
+      docs: '/docs',
+    },
   });
 });
 
