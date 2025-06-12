@@ -177,6 +177,31 @@ class EmailPoller {
       throw error; // Re-throw the error so we can see it in the startup logs
     }
   }
+
+  // Replace or add this showHelp method in your emailPoller.js:
+
+  showHelp() {
+    try {
+      logger.info('🔍 Debug: Starting showHelp method...');
+
+      logger.info('🔍 Debug: About to log keyboard controls...');
+      logger.info('⌨️  Keyboard Controls:');
+
+      logger.info('🔍 Debug: Logging individual help lines...');
+      logger.info('   • P - Poll for emails now');
+      logger.info('   • S - Show status');
+      logger.info('   • C - Clean up old records');
+      logger.info('   • H/? - Show this help');
+      logger.info('   • Q or Ctrl+C - Quit');
+      logger.info('');
+
+      logger.info('🔍 Debug: showHelp completed successfully');
+    } catch (error) {
+      logger.error('❌ Error in showHelp method:', error);
+      logger.error('showHelp stack trace:', error.stack);
+      throw error;
+    }
+  }
   /**
    * Show current poller status
    */
