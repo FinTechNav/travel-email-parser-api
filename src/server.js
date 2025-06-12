@@ -1,20 +1,32 @@
-// src/server.js
+// src/server.js - Updated with email polling
 require('dotenv').config();
 const app = require('./app');
 const logger = require('./utils/logger');
 const { PrismaClient } = require('@prisma/client');
 
+// Import email services
+const EmailProcessor = require('./services/emailProcessor');
+const EmailPoller = require('./services/emailPoller');
+
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
+
+// Initialize email services
+const emailProcessor = new EmailProcessor();
+const emailPoller = new EmailPoller(emailProcessor);
 
 // Graceful shutdown handler
 const gracefulShutdown = (signal) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
-  
+
+  // Stop email polling first
+  emailPoller.stopPolling();
+
   server.close(() => {
     logger.info('HTTP server closed.');
-    
-    prisma.$disconnect()
+
+    prisma
+      .$disconnect()
       .then(() => {
         logger.info('Database connection closed.');
         process.exit(0);
@@ -31,6 +43,11 @@ const server = app.listen(PORT, () => {
   logger.info(`🚀 Travel Email Parser API running on port ${PORT}`);
   logger.info(`📖 API Documentation: http://localhost:${PORT}/docs`);
   logger.info(`🔍 Health Check: http://localhost:${PORT}/api/v1/health`);
+
+  // Start email polling after server is ready
+  setTimeout(() => {
+    emailPoller.startPolling(2); // Poll every 2 minutes
+  }, 5000); // Wait 5 seconds for server to fully initialize
 });
 
 // Handle graceful shutdown
@@ -40,11 +57,13 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught Exception:', err);
+  emailPoller.stopPolling();
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  emailPoller.stopPolling();
   process.exit(1);
 });
 
