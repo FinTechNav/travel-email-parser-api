@@ -21,6 +21,9 @@ const requestLogger = require('./middleware/requestLogger');
 
 const app = express();
 
+const promptRoutes = require('./routes/prompts');
+app.use('/api/v1/prompts', promptRoutes);
+
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 

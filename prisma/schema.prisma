@@ -86,7 +86,6 @@ model ApiUsage {
   @@index([date])
 }
 
-// NEW: Email processing tracking to prevent duplicates
 model ProcessedEmail {
   id            String   @id @default(cuid())
   emailHash     String   @unique  // SHA256 hash of email content for deduplication
@@ -109,4 +108,62 @@ model ProcessedEmail {
   @@index([success])
   @@index([emailHash, messageId]) // Composite index for fast duplicate checking
   @@index([userId, processedAt])   // For user-specific queries
+}
+
+// AI Prompt Templates
+model PromptTemplate {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  category      String   // 'classification', 'parsing', 'validation'
+  type          String   // 'flight', 'hotel', 'car_rental', 'base'
+  version       Int      @default(1)
+  prompt        String   @db.Text
+  variables     Json?    // Variables that can be replaced in prompt
+  isActive      Boolean  @default(true)
+  metadata      Json?    // Additional config like temperature, max_tokens
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  createdBy     String?
+  
+  // For A/B testing
+  testGroup     String?  // 'A', 'B', 'control'
+  successRate   Float?
+  usageCount    Int      @default(0)
+  
+  // Relations
+  usage         PromptUsage[]
+  
+  @@map("prompt_templates")
+}
+
+// AI Model Configurations
+model AIConfiguration {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  model         String   // 'gpt-4o-mini', 'gpt-3.5-turbo'
+  temperature   Float    @default(0.1)
+  maxTokens     Int      @default(2000)
+  isActive      Boolean  @default(true)
+  costPerToken  Float?   // For cost tracking
+  metadata      Json?    // Additional OpenAI parameters
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("ai_configurations")
+}
+
+// Track prompt usage and performance
+model PromptUsage {
+  id            String   @id @default(cuid())
+  templateId    String
+  template      PromptTemplate @relation(fields: [templateId], references: [id])
+  userId        String?
+  emailType     String
+  success       Boolean
+  errorMessage  String?
+  responseTime  Int      // milliseconds
+  tokenUsage    Int?
+  createdAt     DateTime @default(now())
+  
+  @@map("prompt_usage")
 }
