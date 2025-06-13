@@ -5,6 +5,7 @@ const Validator = require('./validator');
 const Enhancer = require('./enhancer');
 const logger = require('../utils/logger');
 const { differenceInDays, parseISO, isValid } = require('date-fns');
+const EmailRulesService = require('./emailRulesService');
 
 class EmailProcessor {
   constructor() {
@@ -12,6 +13,7 @@ class EmailProcessor {
     this.aiParser = new AIParser();
     this.validator = new Validator();
     this.enhancer = new Enhancer();
+    this.emailRulesService = new EmailRulesService();
   }
 
   /**
@@ -251,8 +253,13 @@ class EmailProcessor {
     try {
       logger.info(`Starting email processing for user: ${userId}`);
 
-      // 1. Classify email type
-      const emailType = await this.aiParser.classifyEmail(content);
+      // 1. Classify email type using database rules first, then AI
+      const emailType = await this.aiParser.classifyEmail(
+        content,
+        metadata.subject || '',
+        metadata.from || userEmail || ''
+      );
+
       logger.debug(`Email classified as: ${emailType}`);
 
       // 2. Parse with AI
@@ -851,8 +858,6 @@ class EmailProcessor {
 
   // Mark email as unprocessed
 
-  // REPLACE the markEmailAsUnprocessed function in src/services/emailProcessor.js
-
   async markEmailAsUnprocessed(rawEmail) {
     try {
       logger.info('Attempting to mark email as unprocessed...');
@@ -913,66 +918,62 @@ class EmailProcessor {
       }
 
       // Strategy 2: Content-based detection with improved keywords
+
       if (totalDeleted === 0) {
         logger.info('No exact subject match found, trying content-based detection...');
 
         const emailContent = rawEmail.toLowerCase();
-        let emailType = null;
-        let keywords = [];
 
-        // Detect email type from content with better keywords
-        if (
-          emailContent.includes('hotel') ||
-          emailContent.includes('reservation') ||
-          emailContent.includes('check-in') ||
-          emailContent.includes('thompson') ||
-          emailContent.includes('stay at')
-        ) {
-          emailType = 'hotel';
-          keywords = ['thompson', 'reservation details', 'upcoming stay', 'hotel'];
-          logger.info('Detected hotel email from content');
-        } else if (
-          emailContent.includes('flight') ||
-          emailContent.includes('delta') ||
-          emailContent.includes('skymiles') ||
-          emailContent.includes('boarding') ||
-          emailContent.includes('congrats on your') ||
-          emailContent.includes('award trip')
-        ) {
-          emailType = 'flight';
-          keywords = ['skymiles award trip', 'congrats on your', 'delta', 'flight'];
-          logger.info('Detected flight email from content');
-        } else if (
-          emailContent.includes('car') ||
-          emailContent.includes('rental') ||
-          emailContent.includes('alamo') ||
-          emailContent.includes('pickup')
-        ) {
-          emailType = 'car_rental';
-          keywords = ['alamo', 'rental', 'car', 'pickup'];
-          logger.info('Detected car rental email from content');
-        }
+        // Use database rules instead of hardcoded logic
+        const detectedType = await this.emailRulesService.classifyEmailByRules(
+          emailContent,
+          specificSubject,
+          'bradnjensen@gmail.com' // or extract from rawEmail if needed
+        );
 
-        if (keywords.length > 0) {
-          for (const keyword of keywords) {
-            const result = await this.prisma.processedEmail.deleteMany({
-              where: {
-                subject: {
-                  contains: keyword,
-                  mode: 'insensitive',
-                },
-                fromAddress: 'bradnjensen@gmail.com',
-              },
-            });
+        if (detectedType) {
+          // Get subject patterns for this email type from database
+          const subjectPatterns = await this.emailRulesService.getSubjectPatterns(detectedType);
+          const keywords = [];
 
-            if (result.count > 0) {
-              logger.info(
-                `✅ Deleted ${result.count} record(s) using ${emailType} keyword: "${keyword}"`
-              );
-              totalDeleted += result.count;
-              break;
+          // Build keywords from database patterns
+          for (const pattern of subjectPatterns) {
+            keywords.push(pattern.pattern);
+            if (pattern.variations && Array.isArray(pattern.variations)) {
+              keywords.push(...pattern.variations);
             }
           }
+
+          // If no patterns in database, use the detected type as fallback
+          if (keywords.length === 0) {
+            keywords.push(detectedType);
+          }
+
+          logger.info(`Detected ${detectedType} email from content using database rules`);
+
+          if (keywords.length > 0) {
+            for (const keyword of keywords) {
+              const result = await this.prisma.processedEmail.deleteMany({
+                where: {
+                  subject: {
+                    contains: keyword,
+                    mode: 'insensitive',
+                  },
+                  fromAddress: 'bradnjensen@gmail.com',
+                },
+              });
+
+              if (result.count > 0) {
+                logger.info(
+                  `✅ Deleted ${result.count} record(s) using ${detectedType} keyword: "${keyword}"`
+                );
+                totalDeleted += result.count;
+                break;
+              }
+            }
+          }
+        } else {
+          logger.info('No email type detected from database rules');
         }
       }
 

@@ -2,6 +2,7 @@
 const OpenAI = require('openai');
 const PromptService = require('./promptService');
 const logger = require('../utils/logger');
+const EmailRulesService = require('./emailRulesService');
 
 class AIParser {
   constructor() {
@@ -10,6 +11,7 @@ class AIParser {
     });
 
     this.promptService = new PromptService();
+    this.emailRulesService = new EmailRulesService();
 
     // These will be loaded from database
     this.model = null;
@@ -109,8 +111,37 @@ class AIParser {
   }
 
   // UPDATED: Use database-driven classification
-  async classifyEmail(emailContent) {
+
+  async classifyEmail(emailContent, subject = '', fromAddress = '') {
     try {
+      // First, try database rules classification (faster and cheaper)
+      const dbClassification = await this.emailRulesService.classifyEmailByRules(
+        emailContent,
+        subject,
+        fromAddress
+      );
+
+      if (dbClassification) {
+        logger.info(`Email classified as: ${dbClassification} (using database rules)`);
+
+        // Track usage for database classification
+        const template = await this.promptService.getPromptTemplate('classification', 'base');
+        if (template) {
+          await this.promptService.trackUsage(
+            template.id,
+            'success',
+            null,
+            0, // No response time for database rules
+            0 // No token usage for database rules
+          );
+        }
+
+        return dbClassification;
+      }
+
+      // Fallback to AI classification if no database rule matches
+      logger.info('No database rule matched, falling back to AI classification');
+
       const prompt = await this.promptService.getClassificationPrompt(emailContent);
       const startTime = Date.now();
 
@@ -124,9 +155,9 @@ class AIParser {
       const classification = response.choices[0].message.content.trim().toLowerCase();
       const responseTime = Date.now() - startTime;
 
-      logger.info(`Email classified as: ${classification} (${responseTime}ms)`);
+      logger.info(`Email classified as: ${classification} (using AI fallback, ${responseTime}ms)`);
 
-      // Track usage
+      // Track usage for AI classification
       const template = await this.promptService.getPromptTemplate('classification', 'base');
       if (template) {
         await this.promptService.trackUsage(

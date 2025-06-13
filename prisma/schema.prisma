@@ -167,3 +167,78 @@ model PromptUsage {
   
   @@map("prompt_usage")
 }
+
+// Email Classification Rules
+model EmailClassificationRule {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  emailType   String   // flight, hotel, car_rental, etc.
+  ruleType    String   // 'keyword', 'subject_pattern', 'sender_domain', 'content_pattern'
+  pattern     String   // The actual pattern/keyword to match
+  priority    Int      @default(0) // Higher priority rules checked first
+  isActive    Boolean  @default(true)
+  caseInsensitive Boolean @default(true)
+  
+  // For complex matching
+  metadata    Json?    // Additional matching criteria
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?
+  
+  @@map("email_classification_rules")
+  @@index([emailType, ruleType])
+  @@index([priority])
+}
+
+// Email Subject Patterns (for reprocessing/unmarking)
+model EmailSubjectPattern {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  emailType   String   // flight, hotel, car_rental, etc.
+  pattern     String   // Subject pattern to match
+  variations  Json?    // Array of subject variations
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("email_subject_patterns")
+  @@index([emailType])
+}
+
+// Email Processing Configuration
+model EmailProcessingConfig {
+  id          String   @id @default(cuid())
+  category    String   // 'validation', 'detection', 'parsing'
+  key         String   // Specific config key
+  value       Json     // Configuration value (can be object, array, string, number)
+  description String?
+  isActive    Boolean  @default(true)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([category, key])
+  @@map("email_processing_config")
+  @@index([category])
+}
+
+// Email Sender Rules (for trusted sources, spam filtering, etc.)
+model EmailSenderRule {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  senderPattern String // Email pattern like '@delta.com', 'noreply@booking.com'
+  emailType   String?  // Associated email type, if any
+  trustLevel  String   @default("normal") // 'trusted', 'normal', 'suspicious', 'blocked'
+  isActive    Boolean  @default(true)
+  
+  // Processing preferences for this sender
+  metadata    Json?    // Custom processing rules for this sender
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("email_sender_rules")
+  @@index([trustLevel])
+}
