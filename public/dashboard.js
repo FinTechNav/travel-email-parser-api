@@ -213,7 +213,6 @@ function formatDateRange(startDate, endDate) {
 
 // Render segment
 
-// In public/dashboard.js - Replace the renderSegment function
 function renderSegment(segment) {
   const details = segment.details || {};
 
@@ -223,7 +222,7 @@ function renderSegment(segment) {
                 <span class="segment-type">${segment.type.replace('_', ' ')}</span>
                 ${segment.confirmationNumber ? `<span class="confirmation-number">${segment.confirmationNumber}</span>` : ''}
                 ${details.flight_number ? `<span class="flight-number" style="background: rgba(0,123,255,0.1); color: #007bff; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; margin-left: 8px;">${details.flight_number}</span>` : ''}
-                <button class="delete-btn" onclick="deleteSegment('${segment.id}')" style="
+                <button class="delete-segment-btn" data-segment-id="${segment.id}" style="
                     background: #dc3545; 
                     color: white; 
                     border: none; 
@@ -233,7 +232,7 @@ function renderSegment(segment) {
                     cursor: pointer; 
                     margin-left: auto;
                     transition: all 0.2s ease;
-                " onmouseover="this.style.background='#c82333'" onmouseout="this.style.background='#dc3545'">
+                ">
                     🗑️ Delete
                 </button>
             </div>
@@ -333,7 +332,21 @@ function renderSegment(segment) {
 }
 
 // Render itinerary
+
 function renderItinerary(itinerary) {
+  // Sort segments by startDateTime (chronological order)
+  const sortedSegments = [...itinerary.segments].sort((a, b) => {
+    // Handle null dates by putting them at the end
+    if (!a.startDateTime && !b.startDateTime) return 0;
+    if (!a.startDateTime) return 1;
+    if (!b.startDateTime) return -1;
+
+    const dateA = new Date(a.startDateTime);
+    const dateB = new Date(b.startDateTime);
+
+    return dateA - dateB;
+  });
+
   return `
         <div class="email-result">
             <div class="result-header">
@@ -347,14 +360,58 @@ function renderItinerary(itinerary) {
                 </div>
             </div>
             
-            <div class="segments-grid">
-                ${itinerary.segments.map((segment) => renderSegment(segment)).join('')}
+            <div class="segments-timeline">
+                ${sortedSegments
+                  .map(
+                    (segment, index) => `
+                    ${renderSegment(segment)}
+                    ${index < sortedSegments.length - 1 ? renderTimelineConnector(sortedSegments[index], sortedSegments[index + 1]) : ''}
+                `
+                  )
+                  .join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Add this new function to render timeline connectors
+function renderTimelineConnector(currentSegment, nextSegment) {
+  if (!currentSegment.endDateTime || !nextSegment.startDateTime) {
+    return '<div class="timeline-connector simple">⬇️</div>';
+  }
+
+  const currentEnd = new Date(currentSegment.endDateTime || currentSegment.startDateTime);
+  const nextStart = new Date(nextSegment.startDateTime);
+  const timeDiff = nextStart - currentEnd;
+  const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+
+  let timeText = '';
+  if (days > 0) {
+    timeText = `${days} day${days > 1 ? 's' : ''} later`;
+  } else if (hours > 0) {
+    timeText = `${hours} hour${hours > 1 ? 's' : ''} later`;
+  } else {
+    timeText = 'Next';
+  }
+
+  return `
+        <div class="timeline-connector" style="
+            text-align: center;
+            padding: 10px;
+            color: #6c757d;
+            font-size: 0.9rem;
+            background: linear-gradient(to bottom, transparent 45%, #e9ecef 45%, #e9ecef 55%, transparent 55%);
+        ">
+            <div style="background: white; padding: 5px 15px; border-radius: 20px; display: inline-block; border: 2px solid #e9ecef;">
+                ⬇️ ${timeText}
             </div>
         </div>
     `;
 }
 
 // Load itineraries
+
 async function loadItineraries() {
   if (!apiConfig.baseUrl || !apiConfig.apiKey) {
     return;
@@ -370,6 +427,9 @@ async function loadItineraries() {
 
       const html = response.data.map((itinerary) => renderItinerary(itinerary)).join('');
       document.getElementById('resultsContainer').innerHTML = html;
+
+      // Add event listeners to delete buttons after rendering
+      addDeleteEventListeners();
     } else {
       updateStatus('connected', 'Connected - No travel data found');
       document.getElementById('resultsContainer').innerHTML = `
@@ -391,6 +451,26 @@ async function loadItineraries() {
             </div>
         `;
   }
+}
+
+// Add this function in public/dashboard.js after loadItineraries
+function addDeleteEventListeners() {
+  // Add event listeners to individual delete buttons
+  document.querySelectorAll('.delete-segment-btn').forEach((button) => {
+    button.addEventListener('click', async function () {
+      const segmentId = this.getAttribute('data-segment-id');
+      await deleteSegment(segmentId);
+    });
+
+    // Add hover effects
+    button.addEventListener('mouseenter', function () {
+      this.style.background = '#c82333';
+    });
+
+    button.addEventListener('mouseleave', function () {
+      this.style.background = '#dc3545';
+    });
+  });
 }
 
 // Refresh users list
@@ -479,6 +559,7 @@ async function deleteAllSegments() {
 }
 
 // Wait for DOM to be ready
+// In public/dashboard.js - Update the DOMContentLoaded section
 document.addEventListener('DOMContentLoaded', function () {
   // Handle environment change
   document.getElementById('environment').addEventListener('change', function () {
@@ -491,6 +572,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Handle user selection
   document.getElementById('userSelect').addEventListener('change', handleUserSelection);
+
+  // Handle delete all button
+  document.getElementById('deleteAllBtn').addEventListener('click', deleteAllSegments);
+
+  // Add hover effects to delete all button
+  const deleteAllBtn = document.getElementById('deleteAllBtn');
+  deleteAllBtn.addEventListener('mouseenter', function () {
+    this.style.background = '#c82333';
+  });
+  deleteAllBtn.addEventListener('mouseleave', function () {
+    this.style.background = '#dc3545';
+  });
 
   // Handle form submission
   document.getElementById('configForm').addEventListener('submit', async (e) => {

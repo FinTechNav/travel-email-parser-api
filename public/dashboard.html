@@ -221,11 +221,32 @@
         white-space: nowrap;
       }
 
-      .segments-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      .segments-grid,
+      .segments-timeline {
+        display: flex;
+        flex-direction: column;
         gap: 20px;
         margin-top: 20px;
+      }
+
+      .timeline-connector {
+        text-align: center;
+        padding: 10px;
+        color: #6c757d;
+        font-size: 0.9rem;
+        background: linear-gradient(
+          to bottom,
+          transparent 45%,
+          #e9ecef 45%,
+          #e9ecef 55%,
+          transparent 55%
+        );
+      }
+
+      .timeline-connector.simple {
+        text-align: center;
+        padding: 5px;
+        font-size: 1.2rem;
       }
 
       .segment-card {
@@ -235,6 +256,14 @@
         border-left: 4px solid;
         position: relative;
         overflow: hidden;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+
+      .segment-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
       }
 
       .segment-card::before {
@@ -499,7 +528,7 @@
         <span class="status-indicator status-loading" id="statusIndicator"></span>
         <span id="statusText">Ready to connect...</span>
         <button
-          onclick="deleteAllSegments()"
+          id="deleteAllBtn"
           style="
             background: #dc3545;
             color: white;
@@ -511,8 +540,6 @@
             margin-left: auto;
             transition: all 0.2s ease;
           "
-          onmouseover="this.style.background='#c82333'"
-          onmouseout="this.style.background='#dc3545'"
         >
           🗑️ Delete All Records
         </button>
