@@ -67,15 +67,12 @@ class PromptService {
 
   // Create parsing prompt with dynamic email type
 
-async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
+  async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
   // Get base parsing template
   const baseTemplate = await this.getPromptTemplate('parsing', 'base');
-
-  // Get type-specific template
   const typeTemplate = await this.getPromptTemplate('parsing', emailType);
 
   if (!baseTemplate) {
-    // Fallback to hardcoded prompt if none in database
     return this.getDefaultParsingPrompt(emailContent, emailType, extractedTimes);
   }
 
@@ -91,14 +88,12 @@ async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
 
   // Handle special flight case (different structure)
   if (emailType === 'flight' && typeTemplate) {
-    // Flight templates are complete and don't need base template
     const timeParsingInstructions = `
 CRITICAL TIME PARSING RULES:
 - Convert ALL times to 24-hour format (HH:MM) 
 - Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
 - Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
 - Pay close attention to AM/PM indicators
-- If time seems wrong, double-check the original email text
 
 EXTRACTED TIMES FROM EMAIL:
 ${this.formatExtractedTimes(extractedTimes)}`;
@@ -112,16 +107,12 @@ ${this.formatExtractedTimes(extractedTimes)}`;
 
   // For other types, combine base + type-specific prompts
   let fullPrompt = baseTemplate.prompt;
-
-  // Add type-specific instructions if available
   if (typeTemplate) {
     fullPrompt = fullPrompt.replace('Return a JSON object with this exact structure:', 
       typeTemplate.prompt + '\n\nReturn a JSON object with this exact structure:');
   }
 
-  // Format extracted times for inclusion
   const formattedTimes = this.formatExtractedTimes(extractedTimes);
-
   return this.interpolatePrompt(fullPrompt, {
     emailContent,
     emailType,
@@ -129,12 +120,11 @@ ${this.formatExtractedTimes(extractedTimes)}`;
   });
 }
 
-// Add this new method to format extracted times
+// Add this new method if it doesn't exist
 formatExtractedTimes(extractedTimes) {
   if (!extractedTimes || extractedTimes.length === 0) {
     return 'No specific times found in email.';
   }
-
   return extractedTimes
     .map((timeInfo, index) => 
       `${index + 1}. "${timeInfo.time}" in context: "${timeInfo.context}"`

@@ -188,64 +188,91 @@ class EmailProcessor {
     }
   }
 
-  inferTimezoneFromLocation(data) {
-    if (!data) return null;
+inferTimezoneFromLocation(data) {
+  if (!data) return null;
 
-    // Map common locations to timezones
-    const locationTimezones = {
-      // US Cities
-      atlanta: 'America/New_York',
-      atl: 'America/New_York',
-      austin: 'America/Chicago',
-      aus: 'America/Chicago',
-      'new york': 'America/New_York',
-      nyc: 'America/New_York',
-      'los angeles': 'America/Los_Angeles',
-      lax: 'America/Los_Angeles',
-      chicago: 'America/Chicago',
-      ord: 'America/Chicago',
-      denver: 'America/Denver',
-      den: 'America/Denver',
-      phoenix: 'America/Phoenix',
-      phx: 'America/Phoenix',
-      miami: 'America/New_York',
-      mia: 'America/New_York',
-      seattle: 'America/Los_Angeles',
-      sea: 'America/Los_Angeles',
+  const locationTimezones = {
+    // PS Private Terminal Facilities (CRITICAL: Use facility timezone, not destination)
+    'ps atl': 'America/New_York',     // PS Atlanta → Eastern Time
+    'ps lax': 'America/Los_Angeles',  // PS Los Angeles → Pacific Time
+    'ps jfk': 'America/New_York',     // PS JFK → Eastern Time
+    'ps ord': 'America/Chicago',      // PS Chicago → Central Time
 
-      // International
-      london: 'Europe/London',
-      paris: 'Europe/Paris',
-      tokyo: 'Asia/Tokyo',
-      sydney: 'Australia/Sydney',
-    };
+    // US Cities and Airports
+    atlanta: 'America/New_York',
+    atl: 'America/New_York',
+    austin: 'America/Chicago',
+    aus: 'America/Chicago',
+    'new york': 'America/New_York',
+    nyc: 'America/New_York',
+    'los angeles': 'America/Los_Angeles',
+    lax: 'America/Los_Angeles',
+    chicago: 'America/Chicago',
+    ord: 'America/Chicago',
+    denver: 'America/Denver',
+    den: 'America/Denver',
+    phoenix: 'America/Phoenix',
+    phx: 'America/Phoenix',
+    miami: 'America/New_York',
+    mia: 'America/New_York',
+    seattle: 'America/Los_Angeles',
+    sea: 'America/Los_Angeles',
 
-    // Check destination first, then origin
-    const locations = [
-      data?.locations?.destination,
-      data?.locations?.origin,
-      data?.details?.hotel_address,
-      data?.details?.pickup_location,
-    ].filter(Boolean);
+    // International
+    london: 'Europe/London',
+    paris: 'Europe/Paris',
+    tokyo: 'Asia/Tokyo',
+    sydney: 'Australia/Sydney',
+  };
 
-    for (const location of locations) {
-      const normalizedLocation = location.toLowerCase().trim();
-
-      // Direct match
-      if (locationTimezones[normalizedLocation]) {
-        return locationTimezones[normalizedLocation];
+  // SPECIAL HANDLING for private terminals
+  if (data?.type === 'private_terminal') {
+    const facilityName = data?.service_details?.facility_name || data?.locations?.origin;
+    if (facilityName) {
+      const normalizedFacility = facilityName.toLowerCase().trim();
+      if (locationTimezones[normalizedFacility]) {
+        console.log(`🌎 Using PS facility timezone: ${facilityName} → ${locationTimezones[normalizedFacility]}`);
+        return locationTimezones[normalizedFacility];
       }
-
-      // Partial match
+    }
+    
+    const origin = data?.locations?.origin;
+    if (origin) {
+      const normalizedOrigin = origin.toLowerCase().trim();
       for (const [key, timezone] of Object.entries(locationTimezones)) {
-        if (normalizedLocation.includes(key)) {
+        if (key.startsWith('ps ') && normalizedOrigin.includes(key)) {
+          console.log(`🌎 Using PS origin timezone: ${origin} → ${timezone}`);
           return timezone;
         }
       }
     }
-
-    return null;
   }
+
+  // Check destination first, then origin (for non-PS bookings)
+  const locations = [
+    data?.locations?.destination,
+    data?.locations?.origin,
+    data?.details?.hotel_address,
+    data?.details?.pickup_location,
+  ].filter(Boolean);
+
+  for (const location of locations) {
+    const normalizedLocation = location.toLowerCase().trim();
+
+    if (locationTimezones[normalizedLocation]) {
+      return locationTimezones[normalizedLocation];
+    }
+
+    for (const [key, timezone] of Object.entries(locationTimezones)) {
+      if (normalizedLocation.includes(key)) {
+        return timezone;
+      }
+    }
+  }
+
+  return null;
+}
+
 
   async processEmail({ content, userEmail, userId, metadata = {} }) {
     const startTime = Date.now();

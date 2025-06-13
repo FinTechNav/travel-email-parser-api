@@ -224,11 +224,17 @@ function formatDate(dateString, segment = null, isArrival = false) {
   });
 }
 
-// Helper function to infer timezone from location
 function inferTimezoneFromLocation(location) {
   if (!location) return null;
 
   const locationTimezones = {
+    // PS Private Terminal Facilities (use facility timezone)
+    'ps atl': 'America/New_York',     // PS Atlanta → Eastern Time
+    'ps lax': 'America/Los_Angeles',  // PS Los Angeles → Pacific Time  
+    'ps jfk': 'America/New_York',     // PS JFK → Eastern Time
+    'ps ord': 'America/Chicago',      // PS Chicago → Central Time
+
+    // Regular locations
     atlanta: 'America/New_York',
     atl: 'America/New_York',
     austin: 'America/Chicago',
@@ -252,55 +258,10 @@ function inferTimezoneFromLocation(location) {
 
   const normalizedLocation = location.toLowerCase().trim();
 
-  // Direct match
   if (locationTimezones[normalizedLocation]) {
     return locationTimezones[normalizedLocation];
   }
 
-  // Partial match
-  for (const [key, timezone] of Object.entries(locationTimezones)) {
-    if (normalizedLocation.includes(key)) {
-      return timezone;
-    }
-  }
-
-  return null;
-}
-
-// Helper function to infer timezone from location (same as backend)
-function inferTimezoneFromLocation(location) {
-  if (!location) return null;
-
-  const locationTimezones = {
-    atlanta: 'America/New_York',
-    atl: 'America/New_York',
-    austin: 'America/Chicago',
-    aus: 'America/Chicago',
-    'austin, tx': 'America/Chicago',
-    'new york': 'America/New_York',
-    nyc: 'America/New_York',
-    'los angeles': 'America/Los_Angeles',
-    lax: 'America/Los_Angeles',
-    chicago: 'America/Chicago',
-    ord: 'America/Chicago',
-    denver: 'America/Denver',
-    den: 'America/Denver',
-    phoenix: 'America/Phoenix',
-    phx: 'America/Phoenix',
-    miami: 'America/New_York',
-    mia: 'America/New_York',
-    seattle: 'America/Los_Angeles',
-    sea: 'America/Los_Angeles',
-  };
-
-  const normalizedLocation = location.toLowerCase().trim();
-
-  // Direct match
-  if (locationTimezones[normalizedLocation]) {
-    return locationTimezones[normalizedLocation];
-  }
-
-  // Partial match
   for (const [key, timezone] of Object.entries(locationTimezones)) {
     if (normalizedLocation.includes(key)) {
       return timezone;
