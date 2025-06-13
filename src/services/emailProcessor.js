@@ -153,6 +153,7 @@ class EmailProcessor {
       logger.debug('Time conversion completed');
 
       this.debugParsedData(correctedData, 'AFTER TIME CONVERSION');
+
       // 3. Validate parsed data
       const validatedData = this.validator.validate(correctedData);
       logger.debug('Data validation completed');
@@ -665,105 +666,142 @@ class EmailProcessor {
 
   // Mark email as unprocessed
 
-  // REPLACE the markEmailAsUnprocessed function in src/services/emailProcessor.js
-
   async markEmailAsUnprocessed(rawEmail) {
     try {
-      // The issue is that we need to match the exact hash that EmailPoller created
-      // Since the EmailPoller uses: generateEmailHash(messageId, subject, from, content)
-      // We need to find the processed email record and delete it by matching metadata
-
       logger.info('Attempting to mark email as unprocessed...');
 
-      // Strategy 1: Delete by subject similarity (most reliable for your case)
-      const subjectPatterns = [
-        'Congrats On Your SkyMiles Award Trip',
-        'Fwd: Congrats On Your SkyMiles Award Trip',
-        'SkyMiles Award Trip',
-      ];
+      // The key issue: we need to match the email that created THIS SPECIFIC SEGMENT
+      // not just any email from the user
+
+      // Strategy 1: Try to extract the specific subject from the raw email
+      let specificSubject = null;
+      const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
+      if (subjectMatch) {
+        specificSubject = subjectMatch[1].trim();
+        // Remove HTML tags if present
+        specificSubject = specificSubject.replace(/<[^>]*>/g, '').trim();
+        logger.info(`Extracted subject from raw email: "${specificSubject}"`);
+      }
 
       let totalDeleted = 0;
 
-      for (const pattern of subjectPatterns) {
-        const result = await this.prisma.processedEmail.deleteMany({
-          where: {
-            subject: {
-              contains: pattern,
-            },
-            fromAddress: 'bradnjensen@gmail.com',
-          },
-        });
+      // If we have a specific subject, try to match it exactly
+      if (specificSubject) {
+        // Try different variations of the subject
+        const subjectVariations = [
+          specificSubject,
+          specificSubject.replace('Fwd: ', ''),
+          specificSubject.replace('Re: ', ''),
+          specificSubject.substring(0, 50), // First 50 characters
+        ];
 
-        if (result.count > 0) {
-          logger.info(`✅ Deleted ${result.count} record(s) using subject pattern: "${pattern}"`);
-          totalDeleted += result.count;
-          break; // Stop after first successful deletion
-        }
-      }
-
-      // Strategy 2: If subject matching fails, delete all recent emails from this sender
-      if (totalDeleted === 0) {
-        logger.info('Subject matching failed, trying to delete recent emails from sender...');
-
-        const recentEmails = await this.prisma.processedEmail.deleteMany({
-          where: {
-            fromAddress: 'bradnjensen@gmail.com',
-            processedAt: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
-            },
-          },
-        });
-
-        if (recentEmails.count > 0) {
-          logger.info(
-            `✅ Deleted ${recentEmails.count} recent email(s) from bradnjensen@gmail.com`
-          );
-          totalDeleted += recentEmails.count;
-        }
-      }
-
-      // Strategy 3: Nuclear option - delete the specific hash we found in debug
-      if (totalDeleted === 0) {
-        logger.info('Trying to delete the specific hash we found in the database...');
-
-        const specificHashResult = await this.prisma.processedEmail.deleteMany({
-          where: {
-            emailHash: 'cf91d5ccc8dc6c9f8c5ee4e5f9b4c7d8e3a2f1b0c9d8e7f6a5b4c39e2d1f8e7c', // The full hash we saw in debug
-          },
-        });
-
-        if (specificHashResult.count > 0) {
-          logger.info(`✅ Deleted by specific hash: ${specificHashResult.count} record(s)`);
-          totalDeleted += specificHashResult.count;
-        } else {
-          // Try partial hash match
-          const partialHashResult = await this.prisma.processedEmail.deleteMany({
-            where: {
-              emailHash: {
-                startsWith: 'cf91d5ccc8dc',
+        for (const subject of subjectVariations) {
+          if (subject.length > 5) {
+            // Only try meaningful subjects
+            const result = await this.prisma.processedEmail.deleteMany({
+              where: {
+                subject: {
+                  contains: subject,
+                },
+                fromAddress: 'bradnjensen@gmail.com',
               },
-            },
-          });
+            });
 
-          if (partialHashResult.count > 0) {
-            logger.info(`✅ Deleted by partial hash match: ${partialHashResult.count} record(s)`);
-            totalDeleted += partialHashResult.count;
+            if (result.count > 0) {
+              logger.info(`✅ Deleted ${result.count} record(s) using exact subject: "${subject}"`);
+              totalDeleted += result.count;
+              break; // Stop after first successful deletion
+            }
           }
         }
       }
 
-      if (totalDeleted > 0) {
-        logger.info(`Successfully marked email as unprocessed: removed ${totalDeleted} record(s)`);
-      } else {
-        logger.warn('Could not find any processed email records to delete');
+      // Strategy 2: If no specific subject found, try to determine email type from raw content
+      if (totalDeleted === 0) {
+        logger.info('No exact subject match found, trying content-based detection...');
 
-        // Show current state for debugging
-        const allRecords = await this.prisma.processedEmail.findMany({
+        const emailContent = rawEmail.toLowerCase();
+        let emailType = null;
+
+        // Detect email type from content
+        if (
+          emailContent.includes('hotel') ||
+          emailContent.includes('reservation') ||
+          emailContent.includes('check-in') ||
+          emailContent.includes('thompson')
+        ) {
+          emailType = 'hotel';
+          logger.info('Detected hotel email from content');
+        } else if (
+          emailContent.includes('flight') ||
+          emailContent.includes('delta') ||
+          emailContent.includes('skymiles') ||
+          emailContent.includes('boarding')
+        ) {
+          emailType = 'flight';
+          logger.info('Detected flight email from content');
+        } else if (
+          emailContent.includes('car') ||
+          emailContent.includes('rental') ||
+          emailContent.includes('alamo') ||
+          emailContent.includes('pickup')
+        ) {
+          emailType = 'car_rental';
+          logger.info('Detected car rental email from content');
+        }
+
+        if (emailType) {
+          // Delete the most recent email of this type
+          const typeSpecificKeywords = {
+            hotel: ['thompson', 'hotel', 'reservation', 'stay'],
+            flight: ['delta', 'skymiles', 'flight', 'boarding'],
+            car_rental: ['alamo', 'rental', 'car', 'pickup'],
+          };
+
+          const keywords = typeSpecificKeywords[emailType];
+          for (const keyword of keywords) {
+            const result = await this.prisma.processedEmail.deleteMany({
+              where: {
+                subject: {
+                  contains: keyword,
+                  mode: 'insensitive',
+                },
+                fromAddress: 'bradnjensen@gmail.com',
+              },
+            });
+
+            if (result.count > 0) {
+              logger.info(
+                `✅ Deleted ${result.count} record(s) using ${emailType} keyword: "${keyword}"`
+              );
+              totalDeleted += result.count;
+              break;
+            }
+          }
+        }
+      }
+
+      // Strategy 3: Last resort - show what's available and let user choose
+      if (totalDeleted === 0) {
+        logger.warn('Could not determine which email to mark as unprocessed');
+
+        // Show available emails
+        const allEmails = await this.prisma.processedEmail.findMany({
           where: { fromAddress: 'bradnjensen@gmail.com' },
           select: { emailHash: true, subject: true, processedAt: true },
+          orderBy: { processedAt: 'desc' },
         });
 
-        logger.info(`Still ${allRecords.length} records remaining for bradnjensen@gmail.com`);
+        logger.info('Available processed emails:');
+        allEmails.forEach((email, index) => {
+          logger.info(`${index + 1}. "${email.subject}" (${email.processedAt})`);
+        });
+
+        logger.info('Consider manually deleting the specific email from processed_emails table');
+      }
+
+      if (totalDeleted > 0) {
+        logger.info(`Successfully marked email as unprocessed: removed ${totalDeleted} record(s)`);
       }
 
       return totalDeleted;
