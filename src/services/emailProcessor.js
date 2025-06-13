@@ -136,25 +136,38 @@ class EmailProcessor {
     if (!dateTimeString) return null;
 
     try {
-      // If the string is in format "YYYY-MM-DD HH:MM"
       if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
         const [datePart, timePart] = dateTimeString.split(' ');
-
-        // The times we get are already in the correct local timezone
-        // We just need to store them as UTC properly
-
-        // Create the date as local time, then convert to UTC for storage
         const [year, month, day] = datePart.split('-').map(Number);
         const [hour, minute] = timePart.split(':').map(Number);
 
-        // Create date object (this will be in local timezone)
-        const localDate = new Date(year, month - 1, day, hour, minute);
+        // Determine the timezone
+        let timezone = locationTimezone;
+        if (!timezone) {
+          timezone = this.inferTimezoneFromLocation();
+        }
 
-        logger.debug(`Parsed "${dateTimeString}" as local time: ${localDate.toISOString()}`);
+        // Create date in the specific timezone and convert to UTC
+        // For June 2025 (daylight saving time):
+        let utcOffset = 0;
+        if (timezone === 'America/New_York') {
+          utcOffset = 4; // EDT is UTC-4
+        } else if (timezone === 'America/Chicago') {
+          utcOffset = 5; // CDT is UTC-5
+        } else {
+          utcOffset = 5; // Default to CDT
+        }
+
+        // Create UTC date by adding the offset hours
+        const utcDate = new Date(Date.UTC(year, month - 1, day, hour + utcOffset, minute));
+
+        logger.debug(
+          `Parsed "${dateTimeString}" in ${timezone} (UTC+${utcOffset}) as UTC: ${utcDate.toISOString()}`
+        );
 
         return {
-          utcDateTime: localDate, // This is already in UTC after new Date() conversion
-          originalTimezone: locationTimezone,
+          utcDateTime: utcDate,
+          originalTimezone: timezone,
           originalString: dateTimeString,
         };
       }
