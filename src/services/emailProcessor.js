@@ -760,35 +760,66 @@ class EmailProcessor {
     }
   }
 
-  // Add this method to the EmailProcessor class in src/services/emailProcessor.js
+  // REPLACE the deleteSegment method in src/services/emailProcessor.js
+
   async deleteSegment(segmentId, userId) {
     try {
-      // First get the segment to check ownership and get raw email
-      const segment = await this.prisma.segment.findFirst({
+      // Get the segment to be deleted with all related segments
+      const segment = await this.prisma.segment.findUnique({
         where: {
           id: segmentId,
           itinerary: {
-            userId,
+            userId: userId,
           },
         },
         include: {
-          itinerary: true,
+          itinerary: {
+            include: {
+              segments: true, // Get all segments in the same itinerary
+            },
+          },
         },
       });
 
       if (!segment) {
-        return false;
+        return { success: false, message: 'Segment not found' };
       }
 
-      // If this segment has raw email content, mark the email as unprocessed
-      if (segment.rawEmail) {
-        await this.markEmailAsUnprocessed(segment.rawEmail);
+      // Check if this is a flight segment and if there are multiple segments from the same email
+      let segmentsToDelete = [segment];
+      let confirmationMessage = 'delete this travel segment';
+
+      if (segment.type === 'flight') {
+        // Find all segments with the same confirmation number (from the same email)
+        const relatedSegments = segment.itinerary.segments.filter(
+          (s) =>
+            s.confirmationNumber &&
+            s.confirmationNumber === segment.confirmationNumber &&
+            s.type === 'flight'
+        );
+
+        if (relatedSegments.length > 1) {
+          segmentsToDelete = relatedSegments;
+          confirmationMessage = `delete all ${relatedSegments.length} flight segments from this booking`;
+        }
       }
 
-      // Delete the segment
-      await this.prisma.segment.delete({
-        where: { id: segmentId },
-      });
+      // Delete all identified segments
+      const deletedSegments = [];
+      for (const segmentToDelete of segmentsToDelete) {
+        // If this segment has raw email content, mark the email as unprocessed
+        if (segmentToDelete.rawEmail) {
+          await this.markEmailAsUnprocessed(segmentToDelete.rawEmail);
+        }
+
+        // Delete the segment
+        await this.prisma.segment.delete({
+          where: { id: segmentToDelete.id },
+        });
+
+        deletedSegments.push(segmentToDelete);
+        logger.info(`Deleted segment ${segmentToDelete.id} (${segmentToDelete.type})`);
+      }
 
       // Update itinerary dates after segment deletion
       await this.updateItineraryDates(segment.itineraryId);
@@ -802,11 +833,15 @@ class EmailProcessor {
         await this.prisma.itinerary.delete({
           where: { id: segment.itineraryId },
         });
-        logger.debug(`Deleted empty itinerary ${segment.itineraryId}`);
+        logger.info(`Deleted empty itinerary ${segment.itineraryId}`);
       }
 
-      logger.info(`Deleted segment ${segmentId} and marked email as unprocessed`);
-      return true;
+      return {
+        success: true,
+        deletedCount: deletedSegments.length,
+        message: `Successfully deleted ${deletedSegments.length} segment(s)`,
+        confirmationMessage,
+      };
     } catch (error) {
       logger.error('Failed to delete segment:', error);
       throw error;
@@ -815,49 +850,60 @@ class EmailProcessor {
 
   // Mark email as unprocessed
 
+  // REPLACE the markEmailAsUnprocessed function in src/services/emailProcessor.js
+
   async markEmailAsUnprocessed(rawEmail) {
     try {
       logger.info('Attempting to mark email as unprocessed...');
 
-      // The key issue: we need to match the email that created THIS SPECIFIC SEGMENT
-      // not just any email from the user
-
-      // Strategy 1: Try to extract the specific subject from the raw email
+      // Extract subject from raw email with better parsing
       let specificSubject = null;
-      const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
+      const subjectMatch = rawEmail.match(/Subject:\s*(.+?)(?:\n|To:|<)/i);
       if (subjectMatch) {
         specificSubject = subjectMatch[1].trim();
-        // Remove HTML tags if present
-        specificSubject = specificSubject.replace(/<[^>]*>/g, '').trim();
+        // Clean up HTML entities and extra formatting
+        specificSubject = specificSubject
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/<[^>]*>/g, '') // Remove HTML tags
+          .replace(/\s+/g, ' ')
+          .trim();
         logger.info(`Extracted subject from raw email: "${specificSubject}"`);
       }
 
       let totalDeleted = 0;
 
-      // If we have a specific subject, try to match it exactly
+      // Strategy 1: Try exact subject matching with variations
       if (specificSubject) {
-        // Try different variations of the subject
         const subjectVariations = [
           specificSubject,
           specificSubject.replace('Fwd: ', ''),
           specificSubject.replace('Re: ', ''),
-          specificSubject.substring(0, 50), // First 50 characters
-        ];
+          // For hotel emails, try hotel-specific matching
+          specificSubject.includes('Thompson')
+            ? 'Reservation Details for Your Upcoming Stay at Thompson Austin'
+            : null,
+          // For flight emails, try flight-specific matching
+          specificSubject.includes('SkyMiles') ? 'Congrats On Your SkyMiles Award Trip' : null,
+        ].filter(Boolean);
 
         for (const subject of subjectVariations) {
-          if (subject.length > 5) {
+          if (subject.length > 10) {
             // Only try meaningful subjects
             const result = await this.prisma.processedEmail.deleteMany({
               where: {
                 subject: {
-                  contains: subject,
+                  contains: subject.substring(0, 30), // Use first 30 chars for matching
+                  mode: 'insensitive',
                 },
                 fromAddress: 'bradnjensen@gmail.com',
               },
             });
 
             if (result.count > 0) {
-              logger.info(`✅ Deleted ${result.count} record(s) using exact subject: "${subject}"`);
+              logger.info(
+                `✅ Deleted ${result.count} record(s) using subject variation: "${subject.substring(0, 30)}..."`
+              );
               totalDeleted += result.count;
               break; // Stop after first successful deletion
             }
@@ -865,29 +911,35 @@ class EmailProcessor {
         }
       }
 
-      // Strategy 2: If no specific subject found, try to determine email type from raw content
+      // Strategy 2: Content-based detection with improved keywords
       if (totalDeleted === 0) {
         logger.info('No exact subject match found, trying content-based detection...');
 
         const emailContent = rawEmail.toLowerCase();
         let emailType = null;
+        let keywords = [];
 
-        // Detect email type from content
+        // Detect email type from content with better keywords
         if (
           emailContent.includes('hotel') ||
           emailContent.includes('reservation') ||
           emailContent.includes('check-in') ||
-          emailContent.includes('thompson')
+          emailContent.includes('thompson') ||
+          emailContent.includes('stay at')
         ) {
           emailType = 'hotel';
+          keywords = ['thompson', 'reservation details', 'upcoming stay', 'hotel'];
           logger.info('Detected hotel email from content');
         } else if (
           emailContent.includes('flight') ||
           emailContent.includes('delta') ||
           emailContent.includes('skymiles') ||
-          emailContent.includes('boarding')
+          emailContent.includes('boarding') ||
+          emailContent.includes('congrats on your') ||
+          emailContent.includes('award trip')
         ) {
           emailType = 'flight';
+          keywords = ['skymiles award trip', 'congrats on your', 'delta', 'flight'];
           logger.info('Detected flight email from content');
         } else if (
           emailContent.includes('car') ||
@@ -896,18 +948,11 @@ class EmailProcessor {
           emailContent.includes('pickup')
         ) {
           emailType = 'car_rental';
+          keywords = ['alamo', 'rental', 'car', 'pickup'];
           logger.info('Detected car rental email from content');
         }
 
-        if (emailType) {
-          // Delete the most recent email of this type
-          const typeSpecificKeywords = {
-            hotel: ['thompson', 'hotel', 'reservation', 'stay'],
-            flight: ['delta', 'skymiles', 'flight', 'boarding'],
-            car_rental: ['alamo', 'rental', 'car', 'pickup'],
-          };
-
-          const keywords = typeSpecificKeywords[emailType];
+        if (keywords.length > 0) {
           for (const keyword of keywords) {
             const result = await this.prisma.processedEmail.deleteMany({
               where: {
@@ -930,7 +975,7 @@ class EmailProcessor {
         }
       }
 
-      // Strategy 3: Last resort - show what's available and let user choose
+      // Strategy 3: Last resort - show available emails for manual cleanup
       if (totalDeleted === 0) {
         logger.warn('Could not determine which email to mark as unprocessed');
 
@@ -946,7 +991,22 @@ class EmailProcessor {
           logger.info(`${index + 1}. "${email.subject}" (${email.processedAt})`);
         });
 
-        logger.info('Consider manually deleting the specific email from processed_emails table');
+        // Try deleting the most recent one as a fallback
+        if (allEmails.length > 0) {
+          const mostRecent = allEmails[0];
+          const result = await this.prisma.processedEmail.deleteMany({
+            where: { emailHash: mostRecent.emailHash },
+          });
+
+          if (result.count > 0) {
+            logger.info(`✅ Deleted most recent email as fallback: "${mostRecent.subject}"`);
+            totalDeleted += result.count;
+          }
+        }
+
+        if (totalDeleted === 0) {
+          logger.info('Consider manually deleting the specific email from processed_emails table');
+        }
       }
 
       if (totalDeleted > 0) {

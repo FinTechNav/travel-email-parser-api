@@ -8,6 +8,56 @@ const logger = require('../utils/logger');
 const router = express.Router();
 const emailProcessor = new EmailProcessor();
 
+// GET segment info (for delete confirmation)
+router.get('/segment/:id/info', authMiddleware, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const segment = await emailProcessor.prisma.segment.findUnique({
+      where: {
+        id,
+        itinerary: {
+          userId: req.user.id,
+        },
+      },
+      include: {
+        itinerary: {
+          include: {
+            segments: true,
+          },
+        },
+      },
+    });
+
+    if (!segment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Segment not found',
+      });
+    }
+
+    // Count related segments for flights
+    let relatedSegmentsCount = 1;
+    if (segment.type === 'flight' && segment.confirmationNumber) {
+      relatedSegmentsCount = segment.itinerary.segments.filter(
+        (s) => s.confirmationNumber === segment.confirmationNumber && s.type === 'flight'
+      ).length;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: segment.id,
+        type: segment.type,
+        confirmationNumber: segment.confirmationNumber,
+        relatedSegmentsCount,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/v1/parse/test-email-connection - Test email IMAP connection (ADD THIS)
 router.get('/test-email-connection', async (req, res) => {
   try {

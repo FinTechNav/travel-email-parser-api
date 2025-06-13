@@ -592,47 +592,47 @@ async function refreshUsers() {
 }
 
 // Delete segment function
-async function deleteSegment(segmentId) {
-  if (
-    !confirm(
-      'Are you sure you want to delete this travel segment? This will also mark the original email as unprocessed so it can be re-parsed.'
-    )
-  ) {
-    return;
-  }
 
+// REPLACE the deleteSegment function in public/dashboard.js
+
+async function deleteSegment(segmentId) {
   try {
-    updateStatus('loading', 'Deleting segment...');
+    updateStatus('loading', 'Checking segment details...');
+
+    // First, get segment info to determine if we need special confirmation
+    const segmentInfo = await apiRequest(`/parse/segment/${segmentId}/info`);
+
+    let confirmMessage =
+      'Are you sure you want to delete this travel segment? This will also mark the original email as unprocessed so it can be re-parsed.';
+
+    // If this is a flight segment with multiple related segments
+    if (segmentInfo && segmentInfo.relatedSegmentsCount > 1) {
+      confirmMessage = `This flight is part of a ${segmentInfo.relatedSegmentsCount}-segment booking. Deleting this will remove ALL ${segmentInfo.relatedSegmentsCount} flight segments from this booking and mark the email as unprocessed. Continue?`;
+    }
+
+    if (!confirm(confirmMessage)) {
+      updateStatus('connected', 'Delete cancelled');
+      return;
+    }
+
+    updateStatus('loading', 'Deleting segment(s)...');
 
     const response = await apiRequest(`/parse/segment/${segmentId}`, {
       method: 'DELETE',
     });
 
     if (response.success) {
-      updateStatus('connected', 'Segment deleted successfully');
+      const message =
+        response.deletedCount > 1
+          ? `${response.deletedCount} segments deleted successfully`
+          : 'Segment deleted successfully';
 
-      // Remove the segment card from the DOM
-      const segmentCard = document.querySelector(`[data-segment-id="${segmentId}"]`);
-      if (segmentCard) {
-        segmentCard.style.transition = 'opacity 0.3s ease';
-        segmentCard.style.opacity = '0';
-        setTimeout(() => {
-          segmentCard.remove();
+      updateStatus('connected', message);
 
-          // Check if itinerary is now empty
-          const itineraryCard = segmentCard.closest('.email-result');
-          const remainingSegments = itineraryCard.querySelectorAll('.segment-card');
-          if (remainingSegments.length === 0) {
-            itineraryCard.style.transition = 'opacity 0.3s ease';
-            itineraryCard.style.opacity = '0';
-            setTimeout(() => {
-              itineraryCard.remove();
-              // Refresh the entire view
-              loadItineraries();
-            }, 300);
-          }
-        }, 300);
-      }
+      // Refresh the entire view to show updated state
+      setTimeout(() => {
+        loadItineraries();
+      }, 500);
     } else {
       updateStatus('error', `Failed to delete segment: ${response.message}`);
     }
