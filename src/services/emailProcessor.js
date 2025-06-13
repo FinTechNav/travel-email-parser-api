@@ -140,33 +140,21 @@ class EmailProcessor {
       if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
         const [datePart, timePart] = dateTimeString.split(' ');
 
-        // For hotels in Austin (CDT), 16:00 should be stored as 16:00 CDT, not 16:00 UTC
-        // Let's interpret the time in the destination timezone
-        let timezone = locationTimezone;
-        if (!timezone) {
-          timezone = this.inferTimezoneFromLocation();
-        }
-        if (!timezone) {
-          timezone = 'America/Chicago'; // Default for Austin
-        }
+        // The times we get are already in the correct local timezone
+        // We just need to store them as UTC properly
 
-        // Create the date as if it's in the local timezone
-        // For Austin CDT (UTC-5), 16:00 local = 21:00 UTC
+        // Create the date as local time, then convert to UTC for storage
         const [year, month, day] = datePart.split('-').map(Number);
         const [hour, minute] = timePart.split(':').map(Number);
 
-        // Create date in local timezone then convert to UTC
+        // Create date object (this will be in local timezone)
         const localDate = new Date(year, month - 1, day, hour, minute);
 
-        // For Austin CDT (UTC-5 during daylight time), add 5 hours to get UTC
-        const timezoneOffsetHours = timezone === 'America/Chicago' ? 5 : 4; // CDT vs EST
-        const utcDate = new Date(localDate.getTime() + timezoneOffsetHours * 60 * 60 * 1000);
-
-        logger.debug(`Parsed "${dateTimeString}" in ${timezone} as UTC: ${utcDate.toISOString()}`);
+        logger.debug(`Parsed "${dateTimeString}" as local time: ${localDate.toISOString()}`);
 
         return {
-          utcDateTime: utcDate,
-          originalTimezone: timezone,
+          utcDateTime: localDate, // This is already in UTC after new Date() conversion
+          originalTimezone: locationTimezone,
           originalString: dateTimeString,
         };
       }
