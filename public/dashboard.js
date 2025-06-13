@@ -187,16 +187,83 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 // Format date
-function formatDate(dateString) {
+
+// Format date with location-aware timezone
+function formatDate(dateString, segment = null) {
   if (!dateString) return 'Not specified';
+
   const date = new Date(dateString);
+
+  // For travel segments, try to display in destination timezone
+  let timeZone = 'America/New_York'; // Default to your timezone
+
+  if (segment) {
+    // Determine appropriate timezone based on segment type and location
+    if (segment.type === 'flight') {
+      // For flights, show departure in departure timezone, arrival in arrival timezone
+      // This would require more complex logic, for now use destination
+      timeZone = inferTimezoneFromLocation(segment.destination) || timeZone;
+    } else if (segment.type === 'hotel') {
+      // Hotels should display in hotel's local timezone
+      timeZone = inferTimezoneFromLocation(segment.destination) || timeZone;
+    } else if (segment.type === 'car_rental') {
+      // Car rentals should display in pickup location timezone
+      timeZone = inferTimezoneFromLocation(segment.destination) || timeZone;
+    }
+  }
+
   return date.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: timeZone,
+    timeZoneName: 'short',
   });
+}
+
+// Helper function to infer timezone from location (same as backend)
+function inferTimezoneFromLocation(location) {
+  if (!location) return null;
+
+  const locationTimezones = {
+    atlanta: 'America/New_York',
+    atl: 'America/New_York',
+    austin: 'America/Chicago',
+    aus: 'America/Chicago',
+    'austin, tx': 'America/Chicago',
+    'new york': 'America/New_York',
+    nyc: 'America/New_York',
+    'los angeles': 'America/Los_Angeles',
+    lax: 'America/Los_Angeles',
+    chicago: 'America/Chicago',
+    ord: 'America/Chicago',
+    denver: 'America/Denver',
+    den: 'America/Denver',
+    phoenix: 'America/Phoenix',
+    phx: 'America/Phoenix',
+    miami: 'America/New_York',
+    mia: 'America/New_York',
+    seattle: 'America/Los_Angeles',
+    sea: 'America/Los_Angeles',
+  };
+
+  const normalizedLocation = location.toLowerCase().trim();
+
+  // Direct match
+  if (locationTimezones[normalizedLocation]) {
+    return locationTimezones[normalizedLocation];
+  }
+
+  // Partial match
+  for (const [key, timezone] of Object.entries(locationTimezones)) {
+    if (normalizedLocation.includes(key)) {
+      return timezone;
+    }
+  }
+
+  return null;
 }
 
 // Format date range
@@ -255,7 +322,7 @@ function renderSegment(segment) {
                     ? `
                     <div class="detail-row">
                         <span class="detail-label">Departure:</span>
-                        <span class="detail-value">${formatDate(segment.startDateTime)}</span>
+                        <span class="detail-value">${formatDate(segment.startDateTime, segment)}</span>
                     </div>
                 `
                     : ''
@@ -266,7 +333,7 @@ function renderSegment(segment) {
                     ? `
                     <div class="detail-row">
                         <span class="detail-label">Arrival:</span>
-                        <span class="detail-value">${formatDate(segment.endDateTime)}</span>
+                        <span class="detail-value">${formatDate(segment.endDateTime, segment)}</span>
                     </div>
                 `
                     : ''
