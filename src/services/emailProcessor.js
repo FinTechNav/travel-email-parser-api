@@ -16,8 +16,8 @@ class EmailProcessor {
 
   /**
    * Convert parsed time data to proper datetime format
-   * This fixes common time parsing issues
    */
+
   convertParsedTimes(parsedData) {
     try {
       // Helper function to convert time to 24-hour format
@@ -48,6 +48,11 @@ class EmailProcessor {
         return timeStr; // Return original if can't parse
       };
 
+      // SKIP time conversion for flights - flights have their own datetime format
+      if (parsedData.type === 'flight') {
+        return parsedData; // Return flights unchanged
+      }
+
       // Fix hotel times
       if (parsedData.type === 'hotel' && parsedData.details) {
         if (parsedData.details.check_in_time) {
@@ -68,7 +73,7 @@ class EmailProcessor {
         }
       }
 
-      // Fix travel_dates to include proper times
+      // Fix travel_dates to include proper times (for non-flights)
       if (parsedData.travel_dates) {
         if (parsedData.travel_dates.departure && parsedData.details) {
           const departureDate = parsedData.travel_dates.departure.split(' ')[0];
@@ -636,78 +641,142 @@ class EmailProcessor {
     }
   }
 
-  // Add this method to mark email as unprocessed
+  // Mark email as unprocessed
+
+  // REPLACE the markEmailAsUnprocessed function in src/services/emailProcessor.js with this debug version
 
   async markEmailAsUnprocessed(rawEmail) {
     try {
-      // Try multiple hash generation methods to catch all possible hashes
       const crypto = require('crypto');
 
-      // Method 1: Original simple hash (what you had before)
+      // First, let's see what processed emails exist for this user
+      const allProcessedEmails = await this.prisma.processedEmail.findMany({
+        where: {
+          fromAddress: 'bradnjensen@gmail.com',
+        },
+        select: {
+          id: true,
+          emailHash: true,
+          subject: true,
+          messageId: true,
+          fromAddress: true,
+          processedAt: true,
+        },
+      });
+
+      logger.info(`Found ${allProcessedEmails.length} processed emails for bradnjensen@gmail.com:`);
+      allProcessedEmails.forEach((email) => {
+        logger.info(`- Hash: ${email.emailHash.substring(0, 12)}... Subject: "${email.subject}"`);
+      });
+
+      // Generate multiple possible hashes
+      const possibleHashes = [];
+
+      // Method 1: Simple hash of raw email
       const simpleHash = crypto.createHash('sha256').update(rawEmail).digest('hex');
+      possibleHashes.push({ method: 'simple', hash: simpleHash });
 
-      // Method 2: Try to recreate the emailPoller hash format
-      // Parse the email to extract components
-      let complexHash = null;
-      try {
-        // Try to extract email components from raw email
-        const messageIdMatch = rawEmail.match(/Message-ID:\s*(.+)/i);
-        const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
-        const fromMatch = rawEmail.match(/From:\s*(.+)/i);
-
-        if (messageIdMatch && subjectMatch && fromMatch) {
-          const messageId = messageIdMatch[1].trim();
-          const subject = subjectMatch[1].trim();
-          const from = fromMatch[1].trim();
-
-          // Recreate the hash the same way emailPoller does it
-          const hashInput = `${messageId}|${subject}|${from}|${rawEmail.substring(0, 500)}`;
-          complexHash = crypto.createHash('sha256').update(hashInput).digest('hex');
-        }
-      } catch (parseError) {
-        logger.debug('Could not parse email headers for complex hash:', parseError.message);
-      }
-
-      // Method 3: Hash just the content portion
+      // Method 2: Hash of first 500 characters
       const contentHash = crypto
         .createHash('sha256')
         .update(rawEmail.substring(0, 500))
         .digest('hex');
+      possibleHashes.push({ method: 'content500', hash: contentHash });
 
-      // Collect all possible hashes
-      const hashesToRemove = [simpleHash];
-      if (complexHash) {
-        hashesToRemove.push(complexHash);
+      // Method 3: Try to extract email components and recreate emailPoller hash
+      try {
+        const lines = rawEmail.split('\n');
+        let messageId = null;
+        let subject = null;
+        let from = null;
+
+        for (const line of lines) {
+          if (line.toLowerCase().startsWith('message-id:')) {
+            messageId = line.substring(11).trim();
+          } else if (line.toLowerCase().startsWith('subject:')) {
+            subject = line.substring(8).trim();
+          } else if (line.toLowerCase().startsWith('from:')) {
+            from = line.substring(5).trim();
+          }
+        }
+
+        if (messageId && subject && from) {
+          const hashInput = `${messageId}|${subject}|${from}|${rawEmail.substring(0, 500)}`;
+          const complexHash = crypto.createHash('sha256').update(hashInput).digest('hex');
+          possibleHashes.push({ method: 'complex', hash: complexHash });
+        }
+      } catch (parseError) {
+        logger.debug('Could not parse email headers:', parseError.message);
       }
-      hashesToRemove.push(contentHash);
 
-      // Remove all possible hash variations
+      // Method 4: Just hash the subject line (last resort)
+      const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
+      if (subjectMatch) {
+        const subjectHash = crypto
+          .createHash('sha256')
+          .update(subjectMatch[1].trim())
+          .digest('hex');
+        possibleHashes.push({ method: 'subject', hash: subjectHash });
+      }
+
+      logger.info('Generated possible hashes:');
+      possibleHashes.forEach(({ method, hash }) => {
+        logger.info(`- ${method}: ${hash.substring(0, 12)}...`);
+      });
+
+      // Try to match any of our generated hashes with database hashes
       let totalDeleted = 0;
-      for (const hash of hashesToRemove) {
+      for (const { method, hash } of possibleHashes) {
         const result = await this.prisma.processedEmail.deleteMany({
           where: { emailHash: hash },
         });
-        totalDeleted += result.count;
 
         if (result.count > 0) {
-          logger.debug(
-            `Removed processed email hash: ${hash.substring(0, 8)}... (${result.count} records)`
+          logger.info(
+            `✅ MATCH FOUND! Deleted ${result.count} record(s) using ${method} method: ${hash.substring(0, 12)}...`
           );
+          totalDeleted += result.count;
+        }
+      }
+
+      // If no matches found, try a different approach - delete by subject
+      if (totalDeleted === 0) {
+        const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
+        if (subjectMatch) {
+          const subject = subjectMatch[1].trim();
+          logger.info(`No hash matches found. Trying to delete by subject: "${subject}"`);
+
+          const result = await this.prisma.processedEmail.deleteMany({
+            where: {
+              subject: {
+                contains: subject.substring(0, 50), // First 50 chars of subject
+              },
+              fromAddress: 'bradnjensen@gmail.com',
+            },
+          });
+
+          if (result.count > 0) {
+            logger.info(`✅ Deleted ${result.count} record(s) by subject match`);
+            totalDeleted += result.count;
+          }
         }
       }
 
       if (totalDeleted > 0) {
-        logger.info(`Marked email as unprocessed: removed ${totalDeleted} hash record(s)`);
+        logger.info(`Successfully marked email as unprocessed: removed ${totalDeleted} record(s)`);
       } else {
-        logger.warn(
-          'No processed email hashes found to remove - email may not have been processed through poller'
-        );
+        logger.warn('Could not find any matching processed email records to delete');
+
+        // Show what we're looking for vs what exists
+        logger.info('=== DEBUG INFO ===');
+        logger.info('Raw email preview (first 200 chars):');
+        logger.info(rawEmail.substring(0, 200));
+        logger.info('=== END DEBUG ===');
       }
 
       return totalDeleted;
     } catch (error) {
       logger.error('Failed to mark email as unprocessed:', error);
-      // Don't throw - this is not critical for segment deletion
       return 0;
     }
   }
