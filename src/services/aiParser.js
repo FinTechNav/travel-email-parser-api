@@ -120,104 +120,79 @@ class AIParser {
     }
   }
 
+  // In src/services/aiParser.js - Update the createParsingPrompt method
   createParsingPrompt(emailContent, emailType) {
     const basePrompt = `
-    You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
-    You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+  You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
+  You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+  
+  IMPORTANT FLIGHT PARSING RULES:
+  1. For ROUND-TRIP flights: Create TWO separate flight objects (outbound + return)
+  2. For ONE-WAY flights with connections: Create separate flight objects for each flight segment
+  3. For DIRECT flights: Create ONE flight object
+  4. Each flight object should have DIFFERENT departure/arrival times
+  5. Never create identical flight objects with the same times
+  
+  IMPORTANT RULES:
+  1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+  2. Identify confirmation/booking numbers (remove spaces, clean format)
+  3. Extract passenger names exactly as shown
+  4. Parse prices and currency (numbers only for amount)
+  5. Identify locations (cities, airports, addresses)
+  6. If information is missing, use null
+  7. Always respond with valid JSON only
+  8. For flights, create separate entries for each flight segment
+  `;
+
+    // Add flight-specific prompt
+    if (emailType === 'flight') {
+      const flightPrompt =
+        basePrompt +
+        `
     
-    IMPORTANT RULES:
-    1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
-    2. Identify confirmation/booking numbers (remove spaces, clean format)
-    3. Extract passenger names exactly as shown
-    4. Parse prices and currency (numbers only for amount)
-    5. Identify locations (cities, airports, addresses)
-    6. If information is missing, use null
-    7. Always respond with valid JSON only
-    8. Do not include any explanatory text outside the JSON
-    
-    Return a JSON object with this exact structure:
+    For flight confirmations, return this JSON structure:
     {
-      "type": "flight|hotel|car_rental|train|cruise|restaurant|event",
-      "confirmation_number": "string or null",
-      "passenger_name": "string or null",
-      "travel_dates": {
-        "departure": "YYYY-MM-DD HH:MM or null",
-        "return": "YYYY-MM-DD HH:MM or null"
-      },
-      "locations": {
-        "origin": "string or null",
-        "destination": "string or null"
-      },
+      "type": "flight",
+      "confirmation_number": "ABC123",
+      "passenger_name": "John Doe",
+      "flights": [
+        {
+          "flight_number": "DL1234",
+          "departure_airport": "ATL",
+          "arrival_airport": "AUS", 
+          "departure_city": "Atlanta",
+          "arrival_city": "Austin, TX",
+          "departure_datetime": "2025-06-13T06:18:00",
+          "arrival_datetime": "2025-06-13T08:30:00",
+          "aircraft": "Boeing 737",
+          "seat": "12A"
+        },
+        {
+          "flight_number": "DL5678",
+          "departure_airport": "AUS",
+          "arrival_airport": "ATL",
+          "departure_city": "Austin, TX", 
+          "arrival_city": "Atlanta",
+          "departure_datetime": "2025-06-15T20:35:00",
+          "arrival_datetime": "2025-06-15T23:45:00",
+          "aircraft": "Boeing 737",
+          "seat": "12A"
+        }
+      ],
       "price": {
-        "amount": number or null,
-        "currency": "string or null"
-      },
-      "details": {}
+        "amount": 250.00,
+        "currency": "USD"
+      }
     }
-    `;
+    
+    Parse this email and extract flight information:
+    ${emailContent}`;
 
-    let specificPrompt = '';
-
-    switch (emailType) {
-      case 'flight':
-        specificPrompt = `
-        For flights, also extract in the details object:
-        {
-          "airline": "airline name",
-          "flight_number": "flight number",
-          "aircraft": "aircraft type",
-          "seat": "seat number",
-          "gate": "gate number",
-          "terminal": "terminal",
-          "baggage_allowance": "baggage info",
-          "frequent_flyer_number": "FF number",
-          "class": "economy/business/first"
-        }
-        `;
-        break;
-
-      case 'hotel':
-        specificPrompt = `
-        For hotels, also extract in the details object:
-        {
-          "hotel_name": "hotel name",
-          "hotel_address": "full address",
-          "room_type": "room type",
-          "number_of_guests": number,
-          "check_in_time": "HH:MM",
-          "check_out_time": "HH:MM",
-          "cancellation_policy": "policy details",
-          "amenities": ["wifi", "breakfast", etc],
-          "loyalty_number": "loyalty program number"
-        }
-        `;
-        break;
-
-      case 'car_rental':
-        specificPrompt = `
-        For car rentals, also extract in the details object:
-        {
-          "rental_company": "company name",
-          "car_type": "car category/model",
-          "pickup_location": "pickup address",
-          "return_location": "return address",
-          "pickup_time": "HH:MM",
-          "return_time": "HH:MM",
-          "driver_name": "primary driver",
-          "fuel_policy": "fuel policy",
-          "insurance": "insurance details"
-        }
-        `;
-        break;
-
-      default:
-        specificPrompt = `
-        Extract any relevant details in the details object based on the email type.
-        `;
-        break;
+      return flightPrompt;
     }
 
-    return `${basePrompt}\n${specificPrompt}\n\nEmail content to parse:\n${emailContent}`;
+    // ... rest of your existing prompt logic for other types
+    return basePrompt + `\n\nParse this email:\n${emailContent}`;
   }
 
   async healthCheck() {

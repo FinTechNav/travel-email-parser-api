@@ -220,6 +220,7 @@ function renderSegment(segment) {
             <div class="segment-header">
                 <span class="segment-type">${segment.type.replace('_', ' ')}</span>
                 ${segment.confirmationNumber ? `<span class="confirmation-number">${segment.confirmationNumber}</span>` : ''}
+                ${details.flight_number ? `<span class="flight-number" style="background: rgba(0,123,255,0.1); color: #007bff; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; margin-left: 8px;">${details.flight_number}</span>` : ''}
             </div>
             
             ${
@@ -250,7 +251,7 @@ function renderSegment(segment) {
                   segment.endDateTime
                     ? `
                     <div class="detail-row">
-                        <span class="detail-label">Return/End:</span>
+                        <span class="detail-label">Arrival:</span>
                         <span class="detail-value">${formatDate(segment.endDateTime)}</span>
                     </div>
                 `
@@ -269,11 +270,44 @@ function renderSegment(segment) {
                 }
                 
                 ${
+                  details.seat
+                    ? `
+                    <div class="detail-row">
+                        <span class="detail-label">Seat:</span>
+                        <span class="detail-value">${details.seat}</span>
+                    </div>
+                `
+                    : ''
+                }
+                
+                ${
+                  details.aircraft
+                    ? `
+                    <div class="detail-row">
+                        <span class="detail-label">Aircraft:</span>
+                        <span class="detail-value">${details.aircraft}</span>
+                    </div>
+                `
+                    : ''
+                }
+                
+                ${
                   details.price
                     ? `
                     <div class="detail-row">
                         <span class="detail-label">Price:</span>
                         <span class="detail-value">${details.price.currency || '$'}${details.price.amount || details.price}</span>
+                    </div>
+                `
+                    : ''
+                }
+                
+                ${
+                  details.segment_index && details.total_segments
+                    ? `
+                    <div class="detail-row">
+                        <span class="detail-label">Segment:</span>
+                        <span class="detail-value">${details.segment_index} of ${details.total_segments}</span>
                     </div>
                 `
                     : ''

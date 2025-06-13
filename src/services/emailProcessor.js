@@ -16,7 +16,7 @@ class EmailProcessor {
 
   async processEmail({ content, userEmail, userId, metadata = {} }) {
     const startTime = Date.now();
-    
+
     try {
       logger.info(`Starting email processing for user: ${userId}`);
 
@@ -38,7 +38,7 @@ class EmailProcessor {
 
       // 5. Save to database
       const result = await this.saveToDatabase(enhancedData, userId, content, metadata);
-      
+
       const processingTime = Date.now() - startTime;
       logger.info(`Email processing completed in ${processingTime}ms`);
 
@@ -47,7 +47,7 @@ class EmailProcessor {
         type: emailType,
         data: result,
         processing_time_ms: processingTime,
-        confidence: enhancedData.confidence || 0.85
+        confidence: enhancedData.confidence || 0.85,
       };
     } catch (error) {
       const processingTime = Date.now() - startTime;
@@ -59,7 +59,7 @@ class EmailProcessor {
   async processBatch(emails, userId) {
     const results = [];
     const batchId = `batch_${Date.now()}`;
-    
+
     logger.info(`Processing batch of ${emails.length} emails for user: ${userId}`);
 
     for (let i = 0; i < emails.length; i++) {
@@ -69,29 +69,29 @@ class EmailProcessor {
           content: email.content,
           userEmail: email.user_email,
           userId,
-          metadata: { 
-            ...email.metadata, 
-            batchId, 
-            batchIndex: i 
-          }
+          metadata: {
+            ...email.metadata,
+            batchId,
+            batchIndex: i,
+          },
         });
-        
+
         results.push({
           index: i,
           success: true,
-          data: result
+          data: result,
         });
       } catch (error) {
         logger.error(`Batch item ${i} failed:`, error);
         results.push({
           index: i,
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
     }
 
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter((r) => r.success).length;
     logger.info(`Batch processing completed: ${successCount}/${emails.length} successful`);
 
     return {
@@ -99,65 +99,132 @@ class EmailProcessor {
       total: emails.length,
       successful: successCount,
       failed: emails.length - successCount,
-      results
+      results,
     };
   }
 
+  // In src/services/emailProcessor.js - Replace the saveToDatabase method
   async saveToDatabase(data, userId, rawEmail, metadata) {
     try {
       // Find or create itinerary
       const itinerary = await this.findOrCreateItinerary(data, userId);
-      
-      // Create segment
-      const segment = await this.prisma.segment.create({
-        data: {
-          itineraryId: itinerary.id,
-          type: data.type,
-          confirmationNumber: data.confirmation_number,
-          startDateTime: data.travel_dates?.departure ? 
-            new Date(data.travel_dates.departure) : null,
-          endDateTime: data.travel_dates?.return ? 
-            new Date(data.travel_dates.return) : null,
-          origin: data.locations?.origin,
-          destination: data.locations?.destination,
-          details: {
-            ...data.details,
-            price: data.price,
-            passenger_name: data.passenger_name,
-            metadata,
-            enhancements: data.enhancements || {}
+
+      // Handle different data structures
+      if (data.type === 'flight' && data.flights && Array.isArray(data.flights)) {
+        // Multiple flight segments (round-trip or connections)
+        const segments = [];
+
+        for (let i = 0; i < data.flights.length; i++) {
+          const flight = data.flights[i];
+
+          const segment = await this.prisma.segment.create({
+            data: {
+              itineraryId: itinerary.id,
+              type: 'flight',
+              confirmationNumber: data.confirmation_number,
+              startDateTime: flight.departure_datetime ? new Date(flight.departure_datetime) : null,
+              endDateTime: flight.arrival_datetime ? new Date(flight.arrival_datetime) : null,
+              origin: flight.departure_city || flight.departure_airport,
+              destination: flight.arrival_city || flight.arrival_airport,
+              details: {
+                flight_number: flight.flight_number,
+                departure_airport: flight.departure_airport,
+                arrival_airport: flight.arrival_airport,
+                aircraft: flight.aircraft,
+                seat: flight.seat,
+                passenger_name: data.passenger_name,
+                price: data.price,
+                segment_index: i + 1, // Track which segment this is
+                total_segments: data.flights.length,
+                metadata,
+                enhancements: data.enhancements || {},
+              },
+              rawEmail: process.env.SAVE_RAW_EMAILS === 'true' ? rawEmail : null,
+            },
+            include: {
+              itinerary: true,
+            },
+          });
+
+          segments.push(segment);
+        }
+
+        // Update itinerary dates
+        await this.updateItineraryDates(itinerary.id);
+
+        logger.debug(`Saved ${segments.length} flight segments to itinerary ${itinerary.id}`);
+
+        return {
+          itinerary: {
+            id: itinerary.id,
+            tripName: itinerary.tripName,
+            startDate: itinerary.startDate,
+            endDate: itinerary.endDate,
+            destination: itinerary.destination,
           },
-          rawEmail: process.env.SAVE_RAW_EMAILS === 'true' ? rawEmail : null
-        },
-        include: {
-          itinerary: true
-        }
-      });
+          segments: segments.map((segment) => ({
+            id: segment.id,
+            type: segment.type,
+            confirmationNumber: segment.confirmationNumber,
+            startDateTime: segment.startDateTime,
+            endDateTime: segment.endDateTime,
+            origin: segment.origin,
+            destination: segment.destination,
+            details: segment.details,
+          })),
+        };
+      } else {
+        // Single segment (original logic for hotels, cars, etc.)
+        const segment = await this.prisma.segment.create({
+          data: {
+            itineraryId: itinerary.id,
+            type: data.type,
+            confirmationNumber: data.confirmation_number,
+            startDateTime: data.travel_dates?.departure
+              ? new Date(data.travel_dates.departure)
+              : null,
+            endDateTime: data.travel_dates?.return ? new Date(data.travel_dates.return) : null,
+            origin: data.locations?.origin,
+            destination: data.locations?.destination,
+            details: {
+              ...data.details,
+              price: data.price,
+              passenger_name: data.passenger_name,
+              metadata,
+              enhancements: data.enhancements || {},
+            },
+            rawEmail: process.env.SAVE_RAW_EMAILS === 'true' ? rawEmail : null,
+          },
+          include: {
+            itinerary: true,
+          },
+        });
 
-      // Update itinerary dates if needed
-      await this.updateItineraryDates(itinerary.id);
+        // Update itinerary dates if needed
+        await this.updateItineraryDates(itinerary.id);
 
-      logger.debug(`Saved segment ${segment.id} to itinerary ${itinerary.id}`);
+        logger.debug(`Saved segment ${segment.id} to itinerary ${itinerary.id}`);
 
-      return {
-        itinerary: {
-          id: itinerary.id,
-          tripName: itinerary.tripName,
-          startDate: itinerary.startDate,
-          endDate: itinerary.endDate,
-          destination: itinerary.destination
-        },
-        segment: {
-          id: segment.id,
-          type: segment.type,
-          confirmationNumber: segment.confirmationNumber,
-          startDateTime: segment.startDateTime,
-          endDateTime: segment.endDateTime,
-          origin: segment.origin,
-          destination: segment.destination,
-          details: segment.details
-        }
-      };
+        return {
+          itinerary: {
+            id: itinerary.id,
+            tripName: itinerary.tripName,
+            startDate: itinerary.startDate,
+            endDate: itinerary.endDate,
+            destination: itinerary.destination,
+          },
+          segment: {
+            id: segment.id,
+            type: segment.type,
+            confirmationNumber: segment.confirmationNumber,
+            startDateTime: segment.startDateTime,
+            endDateTime: segment.endDateTime,
+            origin: segment.origin,
+            destination: segment.destination,
+            details: segment.details,
+          },
+        };
+      }
     } catch (error) {
       logger.error('Database save failed:', error);
       throw new Error(`Failed to save to database: ${error.message}`);
@@ -168,7 +235,7 @@ class EmailProcessor {
     try {
       // Smart trip grouping logic
       const potentialItineraries = await this.findPotentialItineraries(data, userId);
-      
+
       if (potentialItineraries.length > 0) {
         // Use existing itinerary if dates are within grouping window
         const existingItinerary = potentialItineraries[0];
@@ -184,12 +251,10 @@ class EmailProcessor {
         data: {
           userId,
           tripName,
-          startDate: data.travel_dates?.departure ? 
-            new Date(data.travel_dates.departure) : null,
-          endDate: data.travel_dates?.return ? 
-            new Date(data.travel_dates.return) : null,
-          destination
-        }
+          startDate: data.travel_dates?.departure ? new Date(data.travel_dates.departure) : null,
+          endDate: data.travel_dates?.return ? new Date(data.travel_dates.return) : null,
+          destination,
+        },
       });
 
       logger.debug(`Created new itinerary: ${newItinerary.id}`);
@@ -207,11 +272,11 @@ class EmailProcessor {
 
     const departureDate = new Date(data.travel_dates.departure);
     const groupingDays = parseInt(process.env.AUTO_GROUP_TRIP_DAYS) || 7;
-    
+
     // Look for itineraries within the grouping window
     const windowStart = new Date(departureDate);
     windowStart.setDate(windowStart.getDate() - groupingDays);
-    
+
     const windowEnd = new Date(departureDate);
     windowEnd.setDate(windowEnd.getDate() + groupingDays);
 
@@ -222,32 +287,32 @@ class EmailProcessor {
           {
             startDate: {
               gte: windowStart,
-              lte: windowEnd
-            }
+              lte: windowEnd,
+            },
           },
           {
             endDate: {
               gte: windowStart,
-              lte: windowEnd
-            }
-          }
-        ]
+              lte: windowEnd,
+            },
+          },
+        ],
       },
       orderBy: {
-        startDate: 'desc'
+        startDate: 'desc',
       },
-      take: 1
+      take: 1,
     });
   }
 
   generateTripName(data) {
     const destination = data.locations?.destination;
     const type = data.type;
-    
+
     if (destination) {
       return `Trip to ${destination}`;
     }
-    
+
     switch (type) {
       case 'flight':
         return 'Flight Booking';
@@ -265,10 +330,9 @@ class EmailProcessor {
   }
 
   extractDestination(data) {
-    return data.locations?.destination || 
-           data.details?.hotel_name || 
-           data.details?.destination || 
-           null;
+    return (
+      data.locations?.destination || data.details?.hotel_name || data.details?.destination || null
+    );
   }
 
   async updateItineraryDates(itineraryId) {
@@ -276,17 +340,17 @@ class EmailProcessor {
       // Get all segments for this itinerary
       const segments = await this.prisma.segment.findMany({
         where: { itineraryId },
-        orderBy: { startDateTime: 'asc' }
+        orderBy: { startDateTime: 'asc' },
       });
 
       if (segments.length === 0) return;
 
       // Calculate new start and end dates
       const dates = segments
-        .map(s => [s.startDateTime, s.endDateTime])
+        .map((s) => [s.startDateTime, s.endDateTime])
         .flat()
-        .filter(date => date !== null)
-        .map(date => new Date(date));
+        .filter((date) => date !== null)
+        .map((date) => new Date(date));
 
       if (dates.length === 0) return;
 
@@ -298,8 +362,8 @@ class EmailProcessor {
         where: { id: itineraryId },
         data: {
           startDate,
-          endDate
-        }
+          endDate,
+        },
       });
 
       logger.debug(`Updated itinerary ${itineraryId} dates: ${startDate} to ${endDate}`);
@@ -315,7 +379,7 @@ class EmailProcessor {
       const where = { userId };
       if (type) {
         where.segments = {
-          some: { type }
+          some: { type },
         };
       }
 
@@ -323,20 +387,20 @@ class EmailProcessor {
         where,
         include: {
           segments: {
-            orderBy: { startDateTime: 'asc' }
-          }
+            orderBy: { startDateTime: 'asc' },
+          },
         },
         orderBy: { startDate: 'desc' },
         take: limit,
-        skip: offset
+        skip: offset,
       });
 
       // Add computed fields
-      const enrichedItineraries = itineraries.map(itinerary => ({
+      const enrichedItineraries = itineraries.map((itinerary) => ({
         ...itinerary,
         segmentCount: itinerary.segments.length,
         duration: this.calculateTripDuration(itinerary.startDate, itinerary.endDate),
-        types: [...new Set(itinerary.segments.map(s => s.type))]
+        types: [...new Set(itinerary.segments.map((s) => s.type))],
       }));
 
       return enrichedItineraries;
@@ -351,13 +415,13 @@ class EmailProcessor {
       const itinerary = await this.prisma.itinerary.findFirst({
         where: {
           id: itineraryId,
-          userId
+          userId,
         },
         include: {
           segments: {
-            orderBy: { startDateTime: 'asc' }
-          }
-        }
+            orderBy: { startDateTime: 'asc' },
+          },
+        },
       });
 
       if (!itinerary) {
@@ -369,8 +433,8 @@ class EmailProcessor {
         ...itinerary,
         segmentCount: itinerary.segments.length,
         duration: this.calculateTripDuration(itinerary.startDate, itinerary.endDate),
-        types: [...new Set(itinerary.segments.map(s => s.type))],
-        missingBookings: this.detectMissingBookings(itinerary.segments)
+        types: [...new Set(itinerary.segments.map((s) => s.type))],
+        missingBookings: this.detectMissingBookings(itinerary.segments),
       };
     } catch (error) {
       logger.error('Failed to fetch itinerary:', error);
@@ -383,9 +447,9 @@ class EmailProcessor {
       const itinerary = await this.prisma.itinerary.updateMany({
         where: {
           id: itineraryId,
-          userId
+          userId,
         },
-        data: updateData
+        data: updateData,
       });
 
       if (itinerary.count === 0) {
@@ -403,15 +467,15 @@ class EmailProcessor {
     try {
       // Delete segments first (cascade)
       await this.prisma.segment.deleteMany({
-        where: { itineraryId }
+        where: { itineraryId },
       });
 
       // Delete itinerary
       const result = await this.prisma.itinerary.deleteMany({
         where: {
           id: itineraryId,
-          userId
-        }
+          userId,
+        },
       });
 
       return result.count > 0;
@@ -423,20 +487,15 @@ class EmailProcessor {
 
   async getUserStats(userId) {
     try {
-      const [
-        totalItineraries,
-        totalSegments,
-        segmentsByType,
-        recentActivity
-      ] = await Promise.all([
+      const [totalItineraries, totalSegments, segmentsByType, recentActivity] = await Promise.all([
         this.prisma.itinerary.count({ where: { userId } }),
         this.prisma.segment.count({
-          where: { itinerary: { userId } }
+          where: { itinerary: { userId } },
         }),
         this.prisma.segment.groupBy({
           by: ['type'],
           where: { itinerary: { userId } },
-          _count: { type: true }
+          _count: { type: true },
         }),
         this.prisma.segment.findMany({
           where: { itinerary: { userId } },
@@ -448,21 +507,21 @@ class EmailProcessor {
             confirmationNumber: true,
             parsedAt: true,
             origin: true,
-            destination: true
-          }
-        })
+            destination: true,
+          },
+        }),
       ]);
 
       return {
         totals: {
           itineraries: totalItineraries,
-          segments: totalSegments
+          segments: totalSegments,
         },
         segmentsByType: segmentsByType.reduce((acc, item) => {
           acc[item.type] = item._count.type;
           return acc;
         }, {}),
-        recentActivity
+        recentActivity,
       };
     } catch (error) {
       logger.error('Failed to fetch user stats:', error);
@@ -480,20 +539,20 @@ class EmailProcessor {
           userId_endpoint_date: {
             userId,
             endpoint,
-            date: today
-          }
+            date: today,
+          },
         },
         update: {
           requestsCount: {
-            increment: count
-          }
+            increment: count,
+          },
         },
         create: {
           userId,
           endpoint,
           date: today,
-          requestsCount: count
-        }
+          requestsCount: count,
+        },
       });
     } catch (error) {
       logger.error('Failed to track usage:', error);
@@ -509,7 +568,7 @@ class EmailProcessor {
     try {
       const start = parseISO(startDate.toISOString());
       const end = parseISO(endDate.toISOString());
-      
+
       if (!isValid(start) || !isValid(end)) {
         return null;
       }
@@ -524,10 +583,10 @@ class EmailProcessor {
 
   detectMissingBookings(segments) {
     const missing = [];
-    
+
     // Sort segments by date
     const sortedSegments = segments
-      .filter(s => s.startDateTime)
+      .filter((s) => s.startDateTime)
       .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime));
 
     if (sortedSegments.length < 2) {
@@ -538,25 +597,26 @@ class EmailProcessor {
     for (let i = 0; i < sortedSegments.length - 1; i++) {
       const current = sortedSegments[i];
       const next = sortedSegments[i + 1];
-      
+
       const currentEnd = current.endDateTime || current.startDateTime;
       const gap = differenceInDays(new Date(next.startDateTime), new Date(currentEnd));
-      
+
       if (gap > 1) {
         // Check if hotel is missing
-        const hasHotel = segments.some(s => 
-          s.type === 'hotel' && 
-          new Date(s.startDateTime) <= new Date(next.startDateTime) &&
-          new Date(s.endDateTime || s.startDateTime) >= new Date(currentEnd)
+        const hasHotel = segments.some(
+          (s) =>
+            s.type === 'hotel' &&
+            new Date(s.startDateTime) <= new Date(next.startDateTime) &&
+            new Date(s.endDateTime || s.startDateTime) >= new Date(currentEnd)
         );
-        
+
         if (!hasHotel) {
           missing.push({
             type: 'hotel',
             startDate: currentEnd,
             endDate: next.startDateTime,
             nights: gap,
-            message: `Missing accommodation: ${gap} night${gap > 1 ? 's' : ''}`
+            message: `Missing accommodation: ${gap} night${gap > 1 ? 's' : ''}`,
           });
         }
       }
@@ -575,15 +635,15 @@ class EmailProcessor {
       const result = await this.prisma.segment.updateMany({
         where: {
           parsedAt: {
-            lt: cutoffDate
+            lt: cutoffDate,
           },
           rawEmail: {
-            not: null
-          }
+            not: null,
+          },
         },
         data: {
-          rawEmail: null
-        }
+          rawEmail: null,
+        },
       });
 
       logger.info(`Cleaned up ${result.count} old raw emails`);
