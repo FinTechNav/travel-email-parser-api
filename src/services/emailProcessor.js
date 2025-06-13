@@ -136,32 +136,33 @@ class EmailProcessor {
     if (!dateTimeString) return null;
 
     try {
-      // If the string is in format "YYYY-MM-DD HH:MM", we need to add timezone context
+      // If the string is in format "YYYY-MM-DD HH:MM"
       if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
         const [datePart, timePart] = dateTimeString.split(' ');
 
-        // Determine timezone based on location or default to user's timezone
+        // For hotels in Austin (CDT), 16:00 should be stored as 16:00 CDT, not 16:00 UTC
+        // Let's interpret the time in the destination timezone
         let timezone = locationTimezone;
-
         if (!timezone) {
-          // Try to infer timezone from location data
           timezone = this.inferTimezoneFromLocation();
         }
-
-        // Default to UTC if no timezone can be determined
         if (!timezone) {
-          timezone = 'UTC';
+          timezone = 'America/Chicago'; // Default for Austin
         }
 
-        // Create timezone-aware datetime string
-        const isoString = `${datePart}T${timePart}:00`;
+        // Create the date as if it's in the local timezone
+        // For Austin CDT (UTC-5), 16:00 local = 21:00 UTC
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hour, minute] = timePart.split(':').map(Number);
 
-        // For now, store as UTC but log the intended timezone
-        const utcDate = new Date(isoString + 'Z'); // Force UTC interpretation
+        // Create date in local timezone then convert to UTC
+        const localDate = new Date(year, month - 1, day, hour, minute);
 
-        logger.debug(
-          `Parsed "${dateTimeString}" as UTC: ${utcDate.toISOString()} (intended timezone: ${timezone})`
-        );
+        // For Austin CDT (UTC-5 during daylight time), add 5 hours to get UTC
+        const timezoneOffsetHours = timezone === 'America/Chicago' ? 5 : 4; // CDT vs EST
+        const utcDate = new Date(localDate.getTime() + timezoneOffsetHours * 60 * 60 * 1000);
+
+        logger.debug(`Parsed "${dateTimeString}" in ${timezone} as UTC: ${utcDate.toISOString()}`);
 
         return {
           utcDateTime: utcDate,
@@ -170,7 +171,6 @@ class EmailProcessor {
         };
       }
 
-      // Fall back for other formats
       const date = new Date(dateTimeString);
       return isNaN(date.getTime())
         ? null

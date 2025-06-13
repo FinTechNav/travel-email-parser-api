@@ -642,33 +642,6 @@ async function deleteSegment(segmentId) {
   }
 }
 
-// Add bulk delete function (optional)
-async function deleteAllSegments() {
-  if (
-    !confirm(
-      'Are you sure you want to delete ALL travel segments? This will mark all emails as unprocessed.'
-    )
-  ) {
-    return;
-  }
-
-  const segmentCards = document.querySelectorAll('[data-segment-id]');
-  const deletePromises = [];
-
-  for (const card of segmentCards) {
-    const segmentId = card.getAttribute('data-segment-id');
-    deletePromises.push(deleteSegment(segmentId));
-  }
-
-  try {
-    await Promise.all(deletePromises);
-    updateStatus('connected', 'All segments deleted');
-    loadItineraries(); // Refresh the view
-  } catch (error) {
-    updateStatus('error', 'Some deletions failed');
-  }
-}
-
 // Wait for DOM to be ready
 // In public/dashboard.js - Update the DOMContentLoaded section
 document.addEventListener('DOMContentLoaded', function () {
@@ -683,18 +656,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Handle user selection
   document.getElementById('userSelect').addEventListener('change', handleUserSelection);
-
-  // Handle delete all button
-  document.getElementById('deleteAllBtn').addEventListener('click', deleteAllSegments);
-
-  // Add hover effects to delete all button
-  const deleteAllBtn = document.getElementById('deleteAllBtn');
-  deleteAllBtn.addEventListener('mouseenter', function () {
-    this.style.background = '#c82333';
-  });
-  deleteAllBtn.addEventListener('mouseleave', function () {
-    this.style.background = '#dc3545';
-  });
 
   // Handle form submission
   document.getElementById('configForm').addEventListener('submit', async (e) => {
