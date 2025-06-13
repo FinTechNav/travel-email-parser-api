@@ -132,6 +132,118 @@ class EmailProcessor {
     logger.info('=== END DEBUG ===');
   }
 
+  parseToTimezoneAwareDateTime(dateTimeString, locationTimezone = null) {
+    if (!dateTimeString) return null;
+
+    try {
+      // If the string is in format "YYYY-MM-DD HH:MM", we need to add timezone context
+      if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
+        const [datePart, timePart] = dateTimeString.split(' ');
+
+        // Determine timezone based on location or default to user's timezone
+        let timezone = locationTimezone;
+
+        if (!timezone) {
+          // Try to infer timezone from location data
+          timezone = this.inferTimezoneFromLocation();
+        }
+
+        // Default to UTC if no timezone can be determined
+        if (!timezone) {
+          timezone = 'UTC';
+        }
+
+        // Create timezone-aware datetime string
+        const isoString = `${datePart}T${timePart}:00`;
+
+        // For now, store as UTC but log the intended timezone
+        const utcDate = new Date(isoString + 'Z'); // Force UTC interpretation
+
+        logger.debug(
+          `Parsed "${dateTimeString}" as UTC: ${utcDate.toISOString()} (intended timezone: ${timezone})`
+        );
+
+        return {
+          utcDateTime: utcDate,
+          originalTimezone: timezone,
+          originalString: dateTimeString,
+        };
+      }
+
+      // Fall back for other formats
+      const date = new Date(dateTimeString);
+      return isNaN(date.getTime())
+        ? null
+        : {
+            utcDateTime: date,
+            originalTimezone: 'UTC',
+            originalString: dateTimeString,
+          };
+    } catch (error) {
+      logger.error(`Failed to parse timezone-aware date: ${dateTimeString}`, error);
+      return null;
+    }
+  }
+
+  inferTimezoneFromLocation(data) {
+    if (!data) return null;
+
+    // Map common locations to timezones
+    const locationTimezones = {
+      // US Cities
+      atlanta: 'America/New_York',
+      atl: 'America/New_York',
+      austin: 'America/Chicago',
+      aus: 'America/Chicago',
+      'new york': 'America/New_York',
+      nyc: 'America/New_York',
+      'los angeles': 'America/Los_Angeles',
+      lax: 'America/Los_Angeles',
+      chicago: 'America/Chicago',
+      ord: 'America/Chicago',
+      denver: 'America/Denver',
+      den: 'America/Denver',
+      phoenix: 'America/Phoenix',
+      phx: 'America/Phoenix',
+      miami: 'America/New_York',
+      mia: 'America/New_York',
+      seattle: 'America/Los_Angeles',
+      sea: 'America/Los_Angeles',
+
+      // International
+      london: 'Europe/London',
+      paris: 'Europe/Paris',
+      tokyo: 'Asia/Tokyo',
+      sydney: 'Australia/Sydney',
+    };
+
+    // Check destination first, then origin
+    const locations = [
+      data?.locations?.destination,
+      data?.locations?.origin,
+      data?.details?.hotel_address,
+      data?.details?.pickup_location,
+    ].filter(Boolean);
+
+    for (const location of locations) {
+      const normalizedLocation = location.toLowerCase().trim();
+
+      // Direct match
+      if (locationTimezones[normalizedLocation]) {
+        return locationTimezones[normalizedLocation];
+      }
+
+      // Partial match
+      for (const [key, timezone] of Object.entries(locationTimezones)) {
+        if (normalizedLocation.includes(key)) {
+          return timezone;
+        }
+      }
+    }
+
+    return null;
+  }
+
   async processEmail({ content, userEmail, userId, metadata = {} }) {
     const startTime = Date.now();
 
@@ -248,8 +360,20 @@ class EmailProcessor {
               itineraryId: itinerary.id,
               type: 'flight',
               confirmationNumber: data.confirmation_number,
-              startDateTime: flight.departure_datetime ? new Date(flight.departure_datetime) : null,
-              endDateTime: flight.arrival_datetime ? new Date(flight.arrival_datetime) : null,
+              startDateTime:
+                this.parseToTimezoneAwareDateTime(
+                  flight.departure_datetime,
+                  this.inferTimezoneFromLocation({
+                    locations: { origin: flight.departure_airport },
+                  })
+                )?.utcDateTime || null,
+              endDateTime:
+                this.parseToTimezoneAwareDateTime(
+                  flight.arrival_datetime,
+                  this.inferTimezoneFromLocation({
+                    locations: { destination: flight.arrival_airport },
+                  })
+                )?.utcDateTime || null,
               origin: flight.departure_city || flight.departure_airport,
               destination: flight.arrival_city || flight.arrival_airport,
               details: {
@@ -306,10 +430,16 @@ class EmailProcessor {
             itineraryId: itinerary.id,
             type: data.type,
             confirmationNumber: data.confirmation_number,
-            startDateTime: data.travel_dates?.departure
-              ? new Date(data.travel_dates.departure)
-              : null,
-            endDateTime: data.travel_dates?.return ? new Date(data.travel_dates.return) : null,
+            startDateTime:
+              this.parseToTimezoneAwareDateTime(
+                data.travel_dates?.departure,
+                this.inferTimezoneFromLocation(data)
+              )?.utcDateTime || null,
+            endDateTime:
+              this.parseToTimezoneAwareDateTime(
+                data.travel_dates?.return,
+                this.inferTimezoneFromLocation(data)
+              )?.utcDateTime || null,
             origin: data.locations?.origin,
             destination: data.locations?.destination,
             details: {
@@ -377,8 +507,16 @@ class EmailProcessor {
         data: {
           userId,
           tripName,
-          startDate: data.travel_dates?.departure ? new Date(data.travel_dates.departure) : null,
-          endDate: data.travel_dates?.return ? new Date(data.travel_dates.return) : null,
+          startDate:
+            this.parseToTimezoneAwareDateTime(
+              data.travel_dates?.departure,
+              this.inferTimezoneFromLocation(data)
+            )?.utcDateTime || null,
+          endDate:
+            this.parseToTimezoneAwareDateTime(
+              data.travel_dates?.return,
+              this.inferTimezoneFromLocation(data)
+            )?.utcDateTime || null,
           destination,
         },
       });
