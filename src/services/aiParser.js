@@ -190,119 +190,157 @@ class AIParser {
     }
   }
 
-  // MODIFIED: Enhanced prompt with better time parsing instructions
+  // Parse
+
+  // COMPLETELY REPLACE the createParsingPrompt function in src/services/aiParser.js
+
   createParsingPrompt(emailContent, emailType, extractedTimes = []) {
     const timeParsingInstructions = `
-    CRITICAL TIME PARSING RULES:
-    - Convert ALL times to 24-hour format (HH:MM)
-    - Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
-    - Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
-    - Pay close attention to AM/PM indicators
-    - If time seems wrong, double-check the original email text
-    - Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
-    - Common car rental: pickup/return during business hours 08:00-18:00
-    
-    EXTRACTED TIMES FROM EMAIL:
-    ${extractedTimes.map((t) => `"${t.time}" found in context: "${t.context}"`).join('\n')}
-    `;
+  CRITICAL TIME PARSING RULES:
+  - Convert ALL times to 24-hour format (HH:MM)
+  - Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
+  - Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
+  - Pay close attention to AM/PM indicators
+  - If time seems wrong, double-check the original email text
+  - Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
+  - Common car rental: pickup/return during business hours 08:00-18:00
+  
+  EXTRACTED TIMES FROM EMAIL:
+  ${extractedTimes.map((t) => `"${t.time}" found in context: "${t.context}"`).join('\n')}
+  `;
 
-    const basePrompt = `
-    You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
-    You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
-    
-    ${timeParsingInstructions}
-    
-    IMPORTANT RULES:
-    1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
-    2. Identify confirmation/booking numbers (remove spaces, clean format)
-    3. Extract passenger names exactly as shown
-    4. Parse prices and currency (numbers only for amount)
-    5. Identify locations (cities, airports, addresses)
-    6. If information is missing, use null
-    7. Always respond with valid JSON only
-    8. Do not include any explanatory text outside the JSON
-    
-    Return a JSON object with this exact structure:
+    // ===== SPECIAL HANDLING FOR FLIGHTS =====
+    if (emailType === 'flight') {
+      return `
+You are an expert flight email parser. Extract ALL flight information from this confirmation email.
+You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+
+${timeParsingInstructions}
+
+CRITICAL FLIGHT PARSING RULES:
+1. For ROUND-TRIP flights: Create TWO separate flight objects in the flights array (outbound + return)
+2. For ONE-WAY flights with connections: Create separate flight objects for each flight segment  
+3. For DIRECT ONE-WAY flights: Create ONE flight object in the flights array
+4. Each flight object must have DIFFERENT departure/arrival times
+5. Never create identical flight objects with the same times
+6. Look carefully for multiple flight numbers, departure times, arrival times
+7. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+
+Return this EXACT JSON structure for flights:
+{
+  "type": "flight",
+  "confirmation_number": "string or null",
+  "passenger_name": "string or null", 
+  "flights": [
     {
-      "type": "flight|hotel|car_rental|train|cruise|restaurant|event",
-      "confirmation_number": "string or null",
-      "passenger_name": "string or null",
-      "travel_dates": {
-        "departure": "YYYY-MM-DD HH:MM or null",
-        "return": "YYYY-MM-DD HH:MM or null"
-      },
-      "locations": {
-        "origin": "string or null",
-        "destination": "string or null"
-      },
-      "price": {
-        "amount": number or null,
-        "currency": "string or null"
-      },
-      "details": {}
+      "flight_number": "flight number like DL1234",
+      "departure_airport": "3-letter airport code",
+      "arrival_airport": "3-letter airport code",
+      "departure_city": "full city name",
+      "arrival_city": "full city name", 
+      "departure_datetime": "YYYY-MM-DD HH:MM",
+      "arrival_datetime": "YYYY-MM-DD HH:MM",
+      "aircraft": "aircraft type",
+      "seat": "seat number"
     }
-    `;
+  ],
+  "price": {
+    "amount": number or null,
+    "currency": "string or null"
+  }
+}
+
+IMPORTANT: If this is a round-trip flight, you MUST create TWO objects in the flights array:
+- First object: outbound flight (e.g., ATL → AUS on June 13)
+- Second object: return flight (e.g., AUS → ATL on June 16)
+
+Each flight should have different departure_datetime and arrival_datetime values.
+
+Parse this flight confirmation email:
+${emailContent}`;
+    }
+
+    // ===== REGULAR HANDLING FOR OTHER TYPES =====
+    const basePrompt = `
+  You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
+  You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+  
+  ${timeParsingInstructions}
+  
+  IMPORTANT RULES:
+  1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+  2. Identify confirmation/booking numbers (remove spaces, clean format)
+  3. Extract passenger names exactly as shown
+  4. Parse prices and currency (numbers only for amount)
+  5. Identify locations (cities, airports, addresses)
+  6. If information is missing, use null
+  7. Always respond with valid JSON only
+  8. Do not include any explanatory text outside the JSON
+  
+  Return a JSON object with this exact structure:
+  {
+    "type": "flight|hotel|car_rental|train|cruise|restaurant|event",
+    "confirmation_number": "string or null",
+    "passenger_name": "string or null",
+    "travel_dates": {
+      "departure": "YYYY-MM-DD HH:MM or null",
+      "return": "YYYY-MM-DD HH:MM or null"
+    },
+    "locations": {
+      "origin": "string or null",
+      "destination": "string or null"
+    },
+    "price": {
+      "amount": number or null,
+      "currency": "string or null"
+    },
+    "details": {}
+  }
+  `;
 
     let specificPrompt = '';
 
     switch (emailType) {
-      case 'flight':
-        specificPrompt = `
-        For flights, also extract in the details object:
-        {
-          "airline": "airline name",
-          "flight_number": "flight number",
-          "aircraft": "aircraft type",
-          "seat": "seat number",
-          "gate": "gate number",
-          "terminal": "terminal",
-          "baggage_allowance": "baggage info",
-          "frequent_flyer_number": "FF number",
-          "class": "economy/business/first"
-        }
-        `;
-        break;
-
       case 'hotel':
         specificPrompt = `
-        For hotels, also extract in the details object:
-        {
-          "hotel_name": "hotel name",
-          "hotel_address": "full address",
-          "room_type": "room type",
-          "number_of_guests": number,
-          "check_in_time": "HH:MM (24-hour format)",
-          "check_out_time": "HH:MM (24-hour format)",
-          "cancellation_policy": "policy details",
-          "amenities": ["wifi", "breakfast", etc],
-          "loyalty_number": "loyalty program number"
-        }
-        IMPORTANT: check_in_time and check_out_time must be in 24-hour format!
-        `;
+      For hotels, also extract in the details object:
+      {
+        "hotel_name": "hotel name",
+        "hotel_address": "full address",
+        "room_type": "room type",
+        "number_of_guests": number,
+        "check_in_time": "HH:MM (24-hour format)",
+        "check_out_time": "HH:MM (24-hour format)",
+        "cancellation_policy": "policy details",
+        "amenities": ["wifi", "breakfast", etc],
+        "loyalty_number": "loyalty program number"
+      }
+      IMPORTANT: check_in_time and check_out_time must be in 24-hour format!
+      `;
         break;
 
       case 'car_rental':
         specificPrompt = `
-        For car rentals, also extract in the details object:
-        {
-          "rental_company": "company name",
-          "car_type": "car category/model",
-          "pickup_location": "pickup address",
-          "return_location": "return address",
-          "pickup_time": "HH:MM (24-hour format)",
-          "return_time": "HH:MM (24-hour format)",
-          "driver_name": "primary driver",
-          "fuel_policy": "fuel policy",
-          "insurance": "insurance details"
-        }
-        IMPORTANT: pickup_time and return_time must be in 24-hour format!
-        `;
+      For car rentals, also extract in the details object:
+      {
+        "rental_company": "company name",
+        "car_type": "car category/model",
+        "pickup_location": "pickup address",
+        "return_location": "return address",
+        "pickup_time": "HH:MM (24-hour format)",
+        "return_time": "HH:MM (24-hour format)",
+        "driver_name": "primary driver",
+        "fuel_policy": "fuel policy",
+        "insurance": "insurance details"
+      }
+      IMPORTANT: pickup_time and return_time must be in 24-hour format!
+      `;
         break;
 
       default:
         specificPrompt = `
-        Extract any relevant details in the details object based on the email type.
-        `;
+      Extract any relevant details in the details object based on the email type.
+      `;
     }
 
     return basePrompt + specificPrompt + `\n\nEmail content:\n${emailContent}`;
