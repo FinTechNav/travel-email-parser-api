@@ -637,21 +637,78 @@ class EmailProcessor {
   }
 
   // Add this method to mark email as unprocessed
+
   async markEmailAsUnprocessed(rawEmail) {
     try {
-      // Generate the same hash that was used when processing
+      // Try multiple hash generation methods to catch all possible hashes
       const crypto = require('crypto');
-      const emailHash = crypto.createHash('sha256').update(rawEmail).digest('hex');
 
-      // Remove from processed emails table
-      await this.prisma.processedEmail.deleteMany({
-        where: { emailHash },
-      });
+      // Method 1: Original simple hash (what you had before)
+      const simpleHash = crypto.createHash('sha256').update(rawEmail).digest('hex');
 
-      logger.debug(`Marked email as unprocessed: ${emailHash.substring(0, 8)}...`);
+      // Method 2: Try to recreate the emailPoller hash format
+      // Parse the email to extract components
+      let complexHash = null;
+      try {
+        // Try to extract email components from raw email
+        const messageIdMatch = rawEmail.match(/Message-ID:\s*(.+)/i);
+        const subjectMatch = rawEmail.match(/Subject:\s*(.+)/i);
+        const fromMatch = rawEmail.match(/From:\s*(.+)/i);
+
+        if (messageIdMatch && subjectMatch && fromMatch) {
+          const messageId = messageIdMatch[1].trim();
+          const subject = subjectMatch[1].trim();
+          const from = fromMatch[1].trim();
+
+          // Recreate the hash the same way emailPoller does it
+          const hashInput = `${messageId}|${subject}|${from}|${rawEmail.substring(0, 500)}`;
+          complexHash = crypto.createHash('sha256').update(hashInput).digest('hex');
+        }
+      } catch (parseError) {
+        logger.debug('Could not parse email headers for complex hash:', parseError.message);
+      }
+
+      // Method 3: Hash just the content portion
+      const contentHash = crypto
+        .createHash('sha256')
+        .update(rawEmail.substring(0, 500))
+        .digest('hex');
+
+      // Collect all possible hashes
+      const hashesToRemove = [simpleHash];
+      if (complexHash) {
+        hashesToRemove.push(complexHash);
+      }
+      hashesToRemove.push(contentHash);
+
+      // Remove all possible hash variations
+      let totalDeleted = 0;
+      for (const hash of hashesToRemove) {
+        const result = await this.prisma.processedEmail.deleteMany({
+          where: { emailHash: hash },
+        });
+        totalDeleted += result.count;
+
+        if (result.count > 0) {
+          logger.debug(
+            `Removed processed email hash: ${hash.substring(0, 8)}... (${result.count} records)`
+          );
+        }
+      }
+
+      if (totalDeleted > 0) {
+        logger.info(`Marked email as unprocessed: removed ${totalDeleted} hash record(s)`);
+      } else {
+        logger.warn(
+          'No processed email hashes found to remove - email may not have been processed through poller'
+        );
+      }
+
+      return totalDeleted;
     } catch (error) {
       logger.error('Failed to mark email as unprocessed:', error);
       // Don't throw - this is not critical for segment deletion
+      return 0;
     }
   }
 
