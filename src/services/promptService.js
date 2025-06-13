@@ -219,6 +219,10 @@ ${this.formatExtractedTimes(extractedTimes)}`;
   }
 
   // Track prompt usage for analytics
+
+  // REPLACE the trackUsage method in src/services/promptService.js
+
+  // Track prompt usage for analytics
   async trackUsage(
     templateId,
     result,
@@ -227,9 +231,15 @@ ${this.formatExtractedTimes(extractedTimes)}`;
     tokenUsage = null
   ) {
     try {
+      // Skip tracking if templateId is missing (fallback prompts)
+      if (!templateId) {
+        return;
+      }
+
       await this.prisma.promptUsage.create({
         data: {
           templateId,
+          emailType: 'unknown', // Add default email type
           success: result === 'success',
           errorMessage,
           responseTime,
@@ -245,8 +255,8 @@ ${this.formatExtractedTimes(extractedTimes)}`;
         },
       });
     } catch (error) {
-      logger.error('Error tracking prompt usage:', error);
-      // Don't throw - usage tracking shouldn't break the main flow
+      // Don't log usage tracking errors to avoid spam
+      // Usage tracking shouldn't break the main flow
     }
   }
 
