@@ -159,6 +159,7 @@ class Validator {
       'cruise',
       'restaurant',
       'event',
+      'private_terminal',
       'other',
     ];
     const cleanType = type.toLowerCase().trim();

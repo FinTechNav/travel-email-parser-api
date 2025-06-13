@@ -67,72 +67,93 @@ class PromptService {
 
   // Create parsing prompt with dynamic email type
 
-  // REPLACE the getParsingPrompt method in src/services/promptService.js
+async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
+  // Get base parsing template
+  const baseTemplate = await this.getPromptTemplate('parsing', 'base');
 
-  // Create parsing prompt with dynamic email type
-  async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
-    // Get base parsing template
-    const baseTemplate = await this.getPromptTemplate('parsing', 'base');
+  // Get type-specific template
+  const typeTemplate = await this.getPromptTemplate('parsing', emailType);
 
-    // Get type-specific template
-    const typeTemplate = await this.getPromptTemplate('parsing', emailType);
+  if (!baseTemplate) {
+    // Fallback to hardcoded prompt if none in database
+    return this.getDefaultParsingPrompt(emailContent, emailType, extractedTimes);
+  }
 
-    if (!baseTemplate) {
-      // Fallback to hardcoded prompt if none in database
-      return this.getDefaultParsingPrompt(emailContent, emailType, extractedTimes);
-    }
+  // Special handling for private_terminal - use specialized prompt
+  if (emailType === 'private_terminal' && typeTemplate) {
+    console.log('Using specialized private_terminal prompt');
+    return this.interpolatePrompt(typeTemplate.prompt, {
+      emailContent,
+      extractedTimes: this.formatExtractedTimes(extractedTimes),
+      emailType
+    });
+  }
 
-    // Handle special flight case (different structure)
-    if (emailType === 'flight' && typeTemplate) {
-      // Flight templates are complete and don't need base template
-      const timeParsingInstructions = `
+  // Handle special flight case (different structure)
+  if (emailType === 'flight' && typeTemplate) {
+    // Flight templates are complete and don't need base template
+    const timeParsingInstructions = `
 CRITICAL TIME PARSING RULES:
 - Convert ALL times to 24-hour format (HH:MM) 
 - Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
 - Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
 - Pay close attention to AM/PM indicators
 - If time seems wrong, double-check the original email text
-- Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
-- Common car rental: pickup/return during business hours 08:00-18:00
 
 EXTRACTED TIMES FROM EMAIL:
 ${this.formatExtractedTimes(extractedTimes)}`;
 
-      return this.interpolatePrompt(typeTemplate.prompt, {
-        emailContent,
-        emailType,
-        timeParsingInstructions,
-      });
-    }
-
-    // For hotels and car rentals, combine base + type-specific
-    let fullPrompt = baseTemplate.prompt;
-
-    if (typeTemplate) {
-      fullPrompt += '\n\n' + typeTemplate.prompt;
-    }
-
-    // Format extracted times properly
-    const formattedTimes = this.formatExtractedTimes(extractedTimes);
-
-    return this.interpolatePrompt(fullPrompt, {
+    return this.interpolatePrompt(typeTemplate.prompt, {
       emailContent,
-      emailType,
-      extractedTimes: formattedTimes,
+      timeParsingInstructions,
+      extractedTimes: this.formatExtractedTimes(extractedTimes)
     });
   }
 
-  // Interpolate variables in prompt template
-  interpolatePrompt(template, variables) {
-    let result = template;
+  // For other types, combine base + type-specific prompts
+  let fullPrompt = baseTemplate.prompt;
 
-    for (const [key, value] of Object.entries(variables)) {
-      const placeholder = `{{${key}}}`;
-      result = result.replace(new RegExp(placeholder, 'g'), value);
-    }
-
-    return result;
+  // Add type-specific instructions if available
+  if (typeTemplate) {
+    fullPrompt = fullPrompt.replace('Return a JSON object with this exact structure:', 
+      typeTemplate.prompt + '\n\nReturn a JSON object with this exact structure:');
   }
+
+  // Format extracted times for inclusion
+  const formattedTimes = this.formatExtractedTimes(extractedTimes);
+
+  return this.interpolatePrompt(fullPrompt, {
+    emailContent,
+    emailType,
+    extractedTimes: formattedTimes
+  });
+}
+
+// Add this new method to format extracted times
+formatExtractedTimes(extractedTimes) {
+  if (!extractedTimes || extractedTimes.length === 0) {
+    return 'No specific times found in email.';
+  }
+
+  return extractedTimes
+    .map((timeInfo, index) => 
+      `${index + 1}. "${timeInfo.time}" in context: "${timeInfo.context}"`
+    )
+    .join('\n');
+}
+
+// Make sure your interpolatePrompt method handles all the variables
+interpolatePrompt(template, variables) {
+  let result = template;
+  
+  // Replace all variables
+  Object.keys(variables).forEach(key => {
+    const placeholder = `{{${key}}}`;
+    result = result.replace(new RegExp(placeholder, 'g'), variables[key] || '');
+  });
+  
+  return result;
+}
 
   // Format extracted times for prompt
   formatExtractedTimes(extractedTimes) {
