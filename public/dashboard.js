@@ -186,10 +186,6 @@ async function apiRequest(endpoint, options = {}) {
   return response.json();
 }
 
-// Format date
-
-// Format date with location-aware timezone
-
 // Format date with location-aware timezone
 function formatDate(dateString, segment = null, isArrival = false) {
   if (!dateString) return 'Not specified';
@@ -200,7 +196,12 @@ function formatDate(dateString, segment = null, isArrival = false) {
   let timeZone = 'America/New_York'; // Your EST timezone
 
   if (segment) {
-    if (segment.type === 'flight') {
+    // Special timezone handling for private terminals
+    if (segment.type === 'private_terminal') {
+      // Use facility timezone (origin), NOT destination timezone
+      timeZone = inferTimezoneFromLocation(segment.origin) || timeZone;
+      console.log(`🌎 Private terminal ${segment.origin} using timezone: ${timeZone}`);
+    } else if (segment.type === 'flight') {
       // For flights: departure times in departure timezone, arrival times in arrival timezone
       if (isArrival) {
         timeZone = inferTimezoneFromLocation(segment.destination) || timeZone;
