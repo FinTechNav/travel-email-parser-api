@@ -593,22 +593,62 @@ class EmailPoller {
     }
   }
 
+  // REPLACE the createAutoUser method in src/services/emailPoller.js
+
   async createAutoUser(email) {
     try {
-      return await this.prisma.user.create({
-        data: {
-          email,
-          name: email.split('@')[0], // Use email prefix as name
-          password: await bcrypt.hash(uuidv4(), 12), // Random password
-          apiKey: uuidv4().replace(/-/g, ''),
-        },
+      logger.info(`🔍 DEBUG: Starting createAutoUser for: ${email}`);
+
+      // First check if user already exists
+      let existingUser = await this.prisma.user.findUnique({
+        where: { email },
       });
+
+      if (existingUser) {
+        logger.info(`🔍 DEBUG: User already exists: ${email}`);
+        return existingUser;
+      }
+
+      logger.info(`🔍 DEBUG: About to create new user for: ${email}`);
+
+      try {
+        // Try to create the user
+        const newUser = await this.prisma.user.create({
+          data: {
+            email,
+            name: email.split('@')[0],
+            password: await bcrypt.hash(uuidv4(), 12),
+            apiKey: uuidv4().replace(/-/g, ''),
+          },
+        });
+
+        logger.info(`✅ DEBUG: Successfully created user: ${email} with ID: ${newUser.id}`);
+        return newUser;
+      } catch (createError) {
+        // If creation fails due to unique constraint, the user was created by another process
+        if (createError.code === 'P2002' && createError.meta?.target?.includes('email')) {
+          logger.info(`🔍 DEBUG: User was created by another process, fetching: ${email}`);
+
+          // Fetch the user that was created
+          const user = await this.prisma.user.findUnique({
+            where: { email },
+          });
+
+          if (user) {
+            logger.info(`✅ DEBUG: Found user created by another process: ${email}`);
+            return user;
+          }
+        }
+
+        // If it's a different error, re-throw it
+        throw createError;
+      }
     } catch (error) {
-      logger.error(`❌ Failed to create user for ${email}:`, error.message);
+      logger.error(`❌ DEBUG: Failed to create user for ${email}`);
+      logger.error(`❌ DEBUG: Error message: ${error.message}`);
       throw error;
     }
   }
-
   // Health check method
   async testConnection() {
     try {
