@@ -1,4 +1,4 @@
-// src/services/aiParser.js - Fixed version with robust JSON parsing
+// src/services/aiParser.js - Enhanced version with better time parsing
 
 const OpenAI = require('openai');
 const logger = require('../utils/logger');
@@ -11,6 +11,72 @@ class AIParser {
     this.model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     this.maxTokens = parseInt(process.env.AI_MAX_TOKENS) || 1500;
     this.temperature = parseFloat(process.env.AI_TEMPERATURE) || 0.1;
+  }
+
+  // NEW: Add time extraction before AI parsing
+  extractTimesFromEmail(emailContent) {
+    const timePatterns = [/(\d{1,2}):(\d{2})\s*(AM|PM)/gi, /(\d{1,2}):(\d{2})/g];
+
+    const extractedTimes = [];
+    const lines = emailContent.split('\n');
+
+    lines.forEach((line, index) => {
+      timePatterns.forEach((pattern) => {
+        const matches = [...line.matchAll(pattern)];
+        matches.forEach((match) => {
+          extractedTimes.push({
+            time: match[0],
+            context: line.trim(),
+            lineNumber: index,
+          });
+        });
+      });
+    });
+
+    logger.debug('Extracted times from email:', extractedTimes);
+    return extractedTimes;
+  }
+
+  // NEW: Add time validation function
+  validateTimes(parsedData) {
+    const warnings = [];
+
+    if (parsedData.type === 'hotel') {
+      if (parsedData.details && parsedData.details.check_in_time) {
+        const checkinHour = parseInt(parsedData.details.check_in_time.split(':')[0] || 0);
+        if (checkinHour < 12 || checkinHour > 20) {
+          warnings.push(
+            `Unusual check-in time: ${parsedData.details.check_in_time} (expected 14:00-18:00)`
+          );
+        }
+      }
+
+      if (parsedData.details && parsedData.details.check_out_time) {
+        const checkoutHour = parseInt(parsedData.details.check_out_time.split(':')[0] || 0);
+        if (checkoutHour < 8 || checkoutHour > 14) {
+          warnings.push(
+            `Unusual check-out time: ${parsedData.details.check_out_time} (expected 10:00-12:00)`
+          );
+        }
+      }
+    }
+
+    if (parsedData.type === 'car_rental') {
+      if (parsedData.details && parsedData.details.pickup_time) {
+        const pickupHour = parseInt(parsedData.details.pickup_time.split(':')[0] || 0);
+        if (pickupHour < 6 || pickupHour > 22) {
+          warnings.push(
+            `Unusual pickup time: ${parsedData.details.pickup_time} (expected 06:00-22:00)`
+          );
+        }
+      }
+    }
+
+    if (warnings.length > 0) {
+      logger.warn('Time validation warnings:', warnings);
+    }
+
+    return warnings;
   }
 
   async classifyEmail(emailContent) {
@@ -50,20 +116,22 @@ class AIParser {
 
   async parseEmail(emailContent, emailType = 'auto') {
     try {
-      const prompt = this.createParsingPrompt(emailContent, emailType);
+      // NEW: Extract times before AI parsing for better context
+      const extractedTimes = this.extractTimesFromEmail(emailContent);
+
+      const prompt = this.createParsingPrompt(emailContent, emailType, extractedTimes);
 
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: this.temperature,
         max_tokens: this.maxTokens,
-        response_format: { type: 'json_object' }, // Force JSON response
+        response_format: { type: 'json_object' },
       });
 
       const content = response.choices[0].message.content.trim();
       logger.debug(`AI response length: ${content.length} characters`);
 
-      // Parse JSON response with better error handling
       let parsedData;
       try {
         parsedData = this.parseJsonResponse(content);
@@ -71,7 +139,6 @@ class AIParser {
         logger.error('Failed to parse AI response as JSON:', jsonError.message);
         logger.error('Raw AI response:', content);
 
-        // Try to extract JSON from the response
         const extractedJson = this.extractJsonFromResponse(content);
         if (extractedJson) {
           parsedData = extractedJson;
@@ -79,6 +146,12 @@ class AIParser {
         } else {
           throw new Error('Invalid JSON response from AI service');
         }
+      }
+
+      // NEW: Validate times after parsing
+      const timeWarnings = this.validateTimes(parsedData);
+      if (timeWarnings.length > 0) {
+        logger.warn(`Time validation warnings for ${emailType}:`, timeWarnings);
       }
 
       logger.info(`Successfully parsed ${emailType} email`);
@@ -90,18 +163,16 @@ class AIParser {
   }
 
   parseJsonResponse(content) {
-    // Try direct JSON parsing first
     try {
       return JSON.parse(content);
     } catch (error) {
-      // If that fails, try to clean the content
       const cleaned = content
-        .replace(/```json\s*/g, '') // Remove JSON code block markers
-        .replace(/```\s*/g, '') // Remove closing code block markers
-        .replace(/^\s*/, '') // Remove leading whitespace
-        .replace(/\s*$/, '') // Remove trailing whitespace
-        .replace(/,\s*}/g, '}') // Remove trailing commas
-        .replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*/g, '')
+        .replace(/^\s*/, '')
+        .replace(/\s*$/, '')
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']');
 
       return JSON.parse(cleaned);
     }
@@ -109,7 +180,6 @@ class AIParser {
 
   extractJsonFromResponse(content) {
     try {
-      // Look for JSON object in the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return this.parseJsonResponse(jsonMatch[0]);
@@ -120,95 +190,122 @@ class AIParser {
     }
   }
 
-  // In src/services/aiParser.js - Update the createParsingPrompt method
-  createParsingPrompt(emailContent, emailType) {
+  // MODIFIED: Enhanced prompt with better time parsing instructions
+  createParsingPrompt(emailContent, emailType, extractedTimes = []) {
+    const timeParsingInstructions = `
+    CRITICAL TIME PARSING RULES:
+    - Convert ALL times to 24-hour format (HH:MM)
+    - Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
+    - Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
+    - Pay close attention to AM/PM indicators
+    - If time seems wrong, double-check the original email text
+    - Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
+    - Common car rental: pickup/return during business hours 08:00-18:00
+    
+    EXTRACTED TIMES FROM EMAIL:
+    ${extractedTimes.map((t) => `"${t.time}" found in context: "${t.context}"`).join('\n')}
+    `;
+
     const basePrompt = `
-  You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
-  You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
-  
-  IMPORTANT FLIGHT PARSING RULES:
-  1. For ROUND-TRIP flights: Create TWO separate flight objects (outbound + return)
-  2. For ONE-WAY flights with connections: Create separate flight objects for each flight segment
-  3. For DIRECT flights: Create ONE flight object
-  4. Each flight object should have DIFFERENT departure/arrival times
-  5. Never create identical flight objects with the same times
-  
-  IMPORTANT RULES:
-  1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
-  2. Identify confirmation/booking numbers (remove spaces, clean format)
-  3. Extract passenger names exactly as shown
-  4. Parse prices and currency (numbers only for amount)
-  5. Identify locations (cities, airports, addresses)
-  6. If information is missing, use null
-  7. Always respond with valid JSON only
-  8. For flights, create separate entries for each flight segment
-  `;
-
-    // Add flight-specific prompt
-    if (emailType === 'flight') {
-      const flightPrompt =
-        basePrompt +
-        `
+    You are an expert travel email parser. Extract ALL relevant information from this confirmation email.
+    You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
     
-    For flight confirmations, return this JSON structure:
+    ${timeParsingInstructions}
+    
+    IMPORTANT RULES:
+    1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+    2. Identify confirmation/booking numbers (remove spaces, clean format)
+    3. Extract passenger names exactly as shown
+    4. Parse prices and currency (numbers only for amount)
+    5. Identify locations (cities, airports, addresses)
+    6. If information is missing, use null
+    7. Always respond with valid JSON only
+    8. Do not include any explanatory text outside the JSON
+    
+    Return a JSON object with this exact structure:
     {
-      "type": "flight",
-      "confirmation_number": "ABC123",
-      "passenger_name": "John Doe",
-      "flights": [
-        {
-          "flight_number": "DL1234",
-          "departure_airport": "ATL",
-          "arrival_airport": "AUS", 
-          "departure_city": "Atlanta",
-          "arrival_city": "Austin, TX",
-          "departure_datetime": "2025-06-13T06:18:00",
-          "arrival_datetime": "2025-06-13T08:30:00",
-          "aircraft": "Boeing 737",
-          "seat": "12A"
-        },
-        {
-          "flight_number": "DL5678",
-          "departure_airport": "AUS",
-          "arrival_airport": "ATL",
-          "departure_city": "Austin, TX", 
-          "arrival_city": "Atlanta",
-          "departure_datetime": "2025-06-15T20:35:00",
-          "arrival_datetime": "2025-06-15T23:45:00",
-          "aircraft": "Boeing 737",
-          "seat": "12A"
-        }
-      ],
+      "type": "flight|hotel|car_rental|train|cruise|restaurant|event",
+      "confirmation_number": "string or null",
+      "passenger_name": "string or null",
+      "travel_dates": {
+        "departure": "YYYY-MM-DD HH:MM or null",
+        "return": "YYYY-MM-DD HH:MM or null"
+      },
+      "locations": {
+        "origin": "string or null",
+        "destination": "string or null"
+      },
       "price": {
-        "amount": 250.00,
-        "currency": "USD"
-      }
+        "amount": number or null,
+        "currency": "string or null"
+      },
+      "details": {}
     }
-    
-    Parse this email and extract flight information:
-    ${emailContent}`;
+    `;
 
-      return flightPrompt;
+    let specificPrompt = '';
+
+    switch (emailType) {
+      case 'flight':
+        specificPrompt = `
+        For flights, also extract in the details object:
+        {
+          "airline": "airline name",
+          "flight_number": "flight number",
+          "aircraft": "aircraft type",
+          "seat": "seat number",
+          "gate": "gate number",
+          "terminal": "terminal",
+          "baggage_allowance": "baggage info",
+          "frequent_flyer_number": "FF number",
+          "class": "economy/business/first"
+        }
+        `;
+        break;
+
+      case 'hotel':
+        specificPrompt = `
+        For hotels, also extract in the details object:
+        {
+          "hotel_name": "hotel name",
+          "hotel_address": "full address",
+          "room_type": "room type",
+          "number_of_guests": number,
+          "check_in_time": "HH:MM (24-hour format)",
+          "check_out_time": "HH:MM (24-hour format)",
+          "cancellation_policy": "policy details",
+          "amenities": ["wifi", "breakfast", etc],
+          "loyalty_number": "loyalty program number"
+        }
+        IMPORTANT: check_in_time and check_out_time must be in 24-hour format!
+        `;
+        break;
+
+      case 'car_rental':
+        specificPrompt = `
+        For car rentals, also extract in the details object:
+        {
+          "rental_company": "company name",
+          "car_type": "car category/model",
+          "pickup_location": "pickup address",
+          "return_location": "return address",
+          "pickup_time": "HH:MM (24-hour format)",
+          "return_time": "HH:MM (24-hour format)",
+          "driver_name": "primary driver",
+          "fuel_policy": "fuel policy",
+          "insurance": "insurance details"
+        }
+        IMPORTANT: pickup_time and return_time must be in 24-hour format!
+        `;
+        break;
+
+      default:
+        specificPrompt = `
+        Extract any relevant details in the details object based on the email type.
+        `;
     }
 
-    // ... rest of your existing prompt logic for other types
-    return basePrompt + `\n\nParse this email:\n${emailContent}`;
-  }
-
-  async healthCheck() {
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: [{ role: 'user', content: 'Respond with just the word "healthy"' }],
-        max_tokens: 10,
-        temperature: 0,
-      });
-
-      return response.choices[0].message.content.trim().toLowerCase().includes('healthy');
-    } catch (error) {
-      logger.error('AI health check failed:', error);
-      return false;
-    }
+    return basePrompt + specificPrompt + `\n\nEmail content:\n${emailContent}`;
   }
 }
 

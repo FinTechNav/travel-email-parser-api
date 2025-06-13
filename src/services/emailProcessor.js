@@ -14,6 +14,100 @@ class EmailProcessor {
     this.enhancer = new Enhancer();
   }
 
+  /**
+   * Convert parsed time data to proper datetime format
+   * This fixes common time parsing issues
+   */
+  convertParsedTimes(parsedData) {
+    try {
+      // Helper function to convert time to 24-hour format
+      const convertTo24Hour = (timeStr) => {
+        if (!timeStr) return null;
+
+        // If already in 24-hour format, return as is
+        if (timeStr.match(/^\d{2}:\d{2}$/)) {
+          return timeStr;
+        }
+
+        // Handle 12-hour format with AM/PM
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+          let hours = parseInt(match[1]);
+          const minutes = match[2];
+          const period = match[3].toUpperCase();
+
+          if (period === 'PM' && hours !== 12) {
+            hours += 12;
+          } else if (period === 'AM' && hours === 12) {
+            hours = 0;
+          }
+
+          return `${hours.toString().padStart(2, '0')}:${minutes}`;
+        }
+
+        return timeStr; // Return original if can't parse
+      };
+
+      // Fix hotel times
+      if (parsedData.type === 'hotel' && parsedData.details) {
+        if (parsedData.details.check_in_time) {
+          parsedData.details.check_in_time = convertTo24Hour(parsedData.details.check_in_time);
+        }
+        if (parsedData.details.check_out_time) {
+          parsedData.details.check_out_time = convertTo24Hour(parsedData.details.check_out_time);
+        }
+      }
+
+      // Fix car rental times
+      if (parsedData.type === 'car_rental' && parsedData.details) {
+        if (parsedData.details.pickup_time) {
+          parsedData.details.pickup_time = convertTo24Hour(parsedData.details.pickup_time);
+        }
+        if (parsedData.details.return_time) {
+          parsedData.details.return_time = convertTo24Hour(parsedData.details.return_time);
+        }
+      }
+
+      // Fix travel_dates to include proper times
+      if (parsedData.travel_dates) {
+        if (parsedData.travel_dates.departure && parsedData.details) {
+          const departureDate = parsedData.travel_dates.departure.split(' ')[0];
+          let departureTime = null;
+
+          if (parsedData.type === 'hotel' && parsedData.details.check_in_time) {
+            departureTime = parsedData.details.check_in_time;
+          } else if (parsedData.type === 'car_rental' && parsedData.details.pickup_time) {
+            departureTime = parsedData.details.pickup_time;
+          }
+
+          if (departureTime) {
+            parsedData.travel_dates.departure = `${departureDate} ${departureTime}`;
+          }
+        }
+
+        if (parsedData.travel_dates.return && parsedData.details) {
+          const returnDate = parsedData.travel_dates.return.split(' ')[0];
+          let returnTime = null;
+
+          if (parsedData.type === 'hotel' && parsedData.details.check_out_time) {
+            returnTime = parsedData.details.check_out_time;
+          } else if (parsedData.type === 'car_rental' && parsedData.details.return_time) {
+            returnTime = parsedData.details.return_time;
+          }
+
+          if (returnTime) {
+            parsedData.travel_dates.return = `${returnDate} ${returnTime}`;
+          }
+        }
+      }
+
+      return parsedData;
+    } catch (error) {
+      logger.error('Time conversion failed:', error);
+      return parsedData; // Return original data if conversion fails
+    }
+  }
+
   async processEmail({ content, userEmail, userId, metadata = {} }) {
     const startTime = Date.now();
 
@@ -28,8 +122,12 @@ class EmailProcessor {
       const parsedData = await this.aiParser.parseEmail(content, emailType);
       logger.debug('AI parsing completed');
 
+      // 2.5. Convert and fix time formats
+      const correctedData = this.convertParsedTimes(parsedData);
+      logger.debug('Time conversion completed');
+
       // 3. Validate parsed data
-      const validatedData = this.validator.validate(parsedData);
+      const validatedData = this.validator.validate(correctedData);
       logger.debug('Data validation completed');
 
       // 4. Enhance with additional data
