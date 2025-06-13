@@ -1,10 +1,10 @@
-<!-- Create Segment Type Modal -->
+<!-- Create Segment Type Modal - FIXED: Removed all onclick attributes -->
 <div id="createSegmentTypeModal" class="modal" style="display: none;">
-  <div class="modal-backdrop" onclick="hideModal('createSegmentTypeModal')"></div>
+  <div class="modal-backdrop" data-action="hide-modal" data-modal="createSegmentTypeModal"></div>
   <div class="modal-content">
     <div class="modal-header">
       <h3>➕ Create New Segment Type</h3>
-      <button class="modal-close" onclick="hideModal('createSegmentTypeModal')">&times;</button>
+      <button class="modal-close" data-action="hide-modal" data-modal="createSegmentTypeModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="createSegmentTypeForm">
@@ -36,7 +36,7 @@
           <small>Use {{emailContent}} placeholder for the email content</small>
         </div>
         <div class="modal-actions">
-          <button type="button" onclick="hideModal('createSegmentTypeModal')">Cancel</button>
+          <button type="button" data-action="hide-modal" data-modal="createSegmentTypeModal">Cancel</button>
           <button type="submit">Create Segment Type</button>
         </div>
       </form>
@@ -44,13 +44,13 @@
   </div>
 </div>
 
-<!-- Create Classification Rule Modal -->
+<!-- Create Classification Rule Modal - FIXED: Removed all onclick attributes -->
 <div id="createRuleModal" class="modal" style="display: none;">
-  <div class="modal-backdrop" onclick="hideModal('createRuleModal')"></div>
+  <div class="modal-backdrop" data-action="hide-modal" data-modal="createRuleModal"></div>
   <div class="modal-content">
     <div class="modal-header">
       <h3>➕ Create Classification Rule</h3>
-      <button class="modal-close" onclick="hideModal('createRuleModal')">&times;</button>
+      <button class="modal-close" data-action="hide-modal" data-modal="createRuleModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="createRuleForm">
@@ -96,7 +96,7 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button type="button" onclick="hideModal('createRuleModal')">Cancel</button>
+          <button type="button" data-action="hide-modal" data-modal="createRuleModal">Cancel</button>
           <button type="submit">Create Rule</button>
         </div>
       </form>
@@ -104,13 +104,13 @@
   </div>
 </div>
 
-<!-- Create Prompt Modal -->
+<!-- Create Prompt Modal - FIXED: Removed all onclick attributes -->
 <div id="createPromptModal" class="modal" style="display: none;">
-  <div class="modal-backdrop" onclick="hideModal('createPromptModal')"></div>
+  <div class="modal-backdrop" data-action="hide-modal" data-modal="createPromptModal"></div>
   <div class="modal-content">
     <div class="modal-header">
       <h3>➕ Create AI Parsing Prompt</h3>
-      <button class="modal-close" onclick="hideModal('createPromptModal')">&times;</button>
+      <button class="modal-close" data-action="hide-modal" data-modal="createPromptModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="createPromptForm">
@@ -154,7 +154,7 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button type="button" onclick="hideModal('createPromptModal')">Cancel</button>
+          <button type="button" data-action="hide-modal" data-modal="createPromptModal">Cancel</button>
           <button type="submit">Create Prompt</button>
         </div>
       </form>
@@ -162,13 +162,13 @@
   </div>
 </div>
 
-<!-- Edit Segment Type Modal -->
+<!-- Edit Segment Type Modal - FIXED: Removed all onclick attributes -->
 <div id="editSegmentTypeModal" class="modal" style="display: none;">
-  <div class="modal-backdrop" onclick="hideModal('editSegmentTypeModal')"></div>
+  <div class="modal-backdrop" data-action="hide-modal" data-modal="editSegmentTypeModal"></div>
   <div class="modal-content">
     <div class="modal-header">
       <h3>✏️ Edit Segment Type</h3>
-      <button class="modal-close" onclick="hideModal('editSegmentTypeModal')">&times;</button>
+      <button class="modal-close" data-action="hide-modal" data-modal="editSegmentTypeModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="editSegmentTypeForm">
@@ -196,7 +196,7 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button type="button" onclick="hideModal('editSegmentTypeModal')">Cancel</button>
+          <button type="button" data-action="hide-modal" data-modal="editSegmentTypeModal">Cancel</button>
           <button type="submit">Update Segment Type</button>
         </div>
       </form>
@@ -204,13 +204,13 @@
   </div>
 </div>
 
-<!-- Test Classification Modal -->
+<!-- Test Classification Modal - FIXED: Removed all onclick attributes -->
 <div id="testClassificationModal" class="modal" style="display: none;">
-  <div class="modal-backdrop" onclick="hideModal('testClassificationModal')"></div>
+  <div class="modal-backdrop" data-action="hide-modal" data-modal="testClassificationModal"></div>
   <div class="modal-content">
     <div class="modal-header">
       <h3>🧪 Test Email Classification</h3>
-      <button class="modal-close" onclick="hideModal('testClassificationModal')">&times;</button>
+      <button class="modal-close" data-action="hide-modal" data-modal="testClassificationModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="testClassificationForm">
@@ -227,7 +227,7 @@
           <textarea name="content" rows="6" placeholder="Paste email content here..."></textarea>
         </div>
         <div class="modal-actions">
-          <button type="button" onclick="hideModal('testClassificationModal')">Cancel</button>
+          <button type="button" data-action="hide-modal" data-modal="testClassificationModal">Cancel</button>
           <button type="submit">Test Classification</button>
         </div>
       </form>

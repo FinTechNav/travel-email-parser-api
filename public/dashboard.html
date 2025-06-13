@@ -13,12 +13,12 @@
         <p>View and manage your latest parsed travel emails</p>
       </div>
 
-      <!-- Tab Navigation -->
+      <!-- Tab Navigation - FIXED: Removed onclick attributes -->
       <div class="tab-navigation">
-        <button class="tab-button active" onclick="showTab('dashboard')">
+        <button class="tab-button active" data-tab="dashboard">
           📧 Email Parser
         </button>
-        <button class="tab-button" onclick="showTab('admin')">
+        <button class="tab-button" data-tab="admin">
           ⚙️ Admin Panel
         </button>
       </div>
@@ -81,7 +81,7 @@
         </div>
       </div>
 
-      <!-- ADMIN TAB -->
+      <!-- ADMIN TAB - FIXED: Removed all inline onclick attributes -->
       <div id="admin-tab" class="tab-content">
         <div class="admin-panel">
           <!-- Admin Info -->
@@ -90,46 +90,46 @@
             <p>Configure email processing rules, manage segment types, and update parsing logic without code changes. Add new travel service types or modify existing ones.</p>
             <ul class="admin-feature-list">
               <li>Add new segment types (Uber, Lyft, Airbnb, etc.)</li>
-              <li>Update classification rules and patterns</li>
-              <li>Manage AI parsing prompts for each segment type</li>
-              <li>Configure timezone rules and display formatting</li>
-              <li>Test and reprocess segments with new rules</li>
+              <li>Configure classification rules for email categorization</li>
+              <li>Update AI parsing prompts for each segment type</li>
+              <li>Manage timezone handling and display preferences</li>
+              <li>Test email classification with live preview</li>
             </ul>
           </div>
 
           <!-- Segment Types Management -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h3>📝 Segment Types</h3>
+              <h3>🏷️ Segment Types</h3>
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" onclick="showCreateSegmentTypeModal()">
-                  ➕ Add New Segment Type
+                <button class="btn-admin success" data-action="show-create-segment-modal">
+                  ➕ Add New Type
                 </button>
-                <button class="btn-admin secondary" onclick="loadSegmentTypes()">
-                  🔄 Refresh List
+                <button class="btn-admin secondary" data-action="load-segment-types">
+                  🔄 Refresh Types
                 </button>
               </div>
               <div id="segmentTypesContainer">
                 <div style="padding: 20px; text-align: center; color: #6c757d;">
-                  Click "Refresh List" to load configured segment types
+                  Configure travel service types here (flights, hotels, rideshare, etc.)
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Classification Rules -->
+          <!-- Classification Rules Management -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h3>🎯 Classification Rules</h3>
+              <h3>🔍 Classification Rules</h3>
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" onclick="showCreateRuleModal()">
-                  ➕ Add Classification Rule
+                <button class="btn-admin success" data-action="show-create-rule-modal">
+                  ➕ Add New Rule
                 </button>
-                <button class="btn-admin secondary" onclick="loadClassificationRules()">
+                <button class="btn-admin secondary" data-action="load-classification-rules">
                   🔄 Refresh Rules
                 </button>
               </div>
@@ -148,10 +148,10 @@
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" onclick="showCreatePromptModal()">
+                <button class="btn-admin success" data-action="show-create-prompt-modal">
                   ➕ Add New Prompt
                 </button>
-                <button class="btn-admin secondary" onclick="loadPrompts()">
+                <button class="btn-admin secondary" data-action="load-prompts">
                   🔄 Refresh Prompts
                 </button>
               </div>
@@ -170,16 +170,16 @@
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin" onclick="fixPSTimezone()">
+                <button class="btn-admin" data-action="fix-ps-timezone">
                   🕐 Fix PS Timezone Issues
                 </button>
-                <button class="btn-admin secondary" onclick="reprocessAllSegments()">
+                <button class="btn-admin secondary" data-action="reprocess-all-segments">
                   🔄 Reprocess All Segments
                 </button>
-                <button class="btn-admin success" onclick="checkSystemStatus()">
+                <button class="btn-admin success" data-action="check-system-status">
                   ✅ Check System Status
                 </button>
-                <button class="btn-admin" onclick="testClassificationRules()">
+                <button class="btn-admin" data-action="test-classification-rules">
                   🧪 Test Classification
                 </button>
               </div>
