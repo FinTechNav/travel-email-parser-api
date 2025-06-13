@@ -113,6 +113,25 @@ class EmailProcessor {
     }
   }
 
+  debugParsedData(parsedData, step) {
+    logger.info(`=== DEBUG ${step} ===`);
+    logger.info(`Type: ${parsedData.type}`);
+
+    if (parsedData.type === 'hotel') {
+      logger.info('Hotel specific data:');
+      if (parsedData.details) {
+        logger.info(`- check_in_time: "${parsedData.details.check_in_time}"`);
+        logger.info(`- check_out_time: "${parsedData.details.check_out_time}"`);
+      }
+      if (parsedData.travel_dates) {
+        logger.info(`- departure: "${parsedData.travel_dates.departure}"`);
+        logger.info(`- return: "${parsedData.travel_dates.return}"`);
+      }
+    }
+
+    logger.info('=== END DEBUG ===');
+  }
+
   async processEmail({ content, userEmail, userId, metadata = {} }) {
     const startTime = Date.now();
 
@@ -127,10 +146,13 @@ class EmailProcessor {
       const parsedData = await this.aiParser.parseEmail(content, emailType);
       logger.debug('AI parsing completed');
 
+      this.debugParsedData(parsedData, 'AFTER AI PARSING');
+
       // 2.5. Convert and fix time formats
       const correctedData = this.convertParsedTimes(parsedData);
       logger.debug('Time conversion completed');
 
+      this.debugParsedData(correctedData, 'AFTER TIME CONVERSION');
       // 3. Validate parsed data
       const validatedData = this.validator.validate(correctedData);
       logger.debug('Data validation completed');
