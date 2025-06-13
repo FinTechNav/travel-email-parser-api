@@ -426,10 +426,7 @@ class EmailProcessor {
       } else {
         // Single segment (original logic for hotels, cars, etc.)
 
-        // ADD this debug logging right before your database save in saveToDatabase method
-        // Find the single segment creation section and add this right before the Prisma create:
-
-        // Single segment (original logic for hotels, cars, etc.)
+        // Parse dates with debug logging
         const startDateInfo = this.parseToTimezoneAwareDateTime(
           data.travel_dates?.departure,
           this.inferTimezoneFromLocation(data)
@@ -439,7 +436,6 @@ class EmailProcessor {
           this.inferTimezoneFromLocation(data)
         );
 
-        // ADD THESE DEBUG LOGS:
         logger.info('=== DATABASE SAVE DEBUG ===');
         logger.info(`Original departure: "${data.travel_dates?.departure}"`);
         logger.info(`Original return: "${data.travel_dates?.return}"`);
@@ -455,25 +451,6 @@ class EmailProcessor {
             confirmationNumber: data.confirmation_number,
             startDateTime: startDateInfo?.utcDateTime || null,
             endDateTime: endDateInfo?.utcDateTime || null,
-            // ... rest of your existing code
-          },
-          // ... rest of your existing code
-        });
-        const segment = await this.prisma.segment.create({
-          data: {
-            itineraryId: itinerary.id,
-            type: data.type,
-            confirmationNumber: data.confirmation_number,
-            startDateTime:
-              this.parseToTimezoneAwareDateTime(
-                data.travel_dates?.departure,
-                this.inferTimezoneFromLocation(data)
-              )?.utcDateTime || null,
-            endDateTime:
-              this.parseToTimezoneAwareDateTime(
-                data.travel_dates?.return,
-                this.inferTimezoneFromLocation(data)
-              )?.utcDateTime || null,
             origin: data.locations?.origin,
             destination: data.locations?.destination,
             details: {
