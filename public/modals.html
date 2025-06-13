@@ -1,0 +1,237 @@
+<!-- Create Segment Type Modal -->
+<div id="createSegmentTypeModal" class="modal" style="display: none;">
+  <div class="modal-backdrop" onclick="hideModal('createSegmentTypeModal')"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>➕ Create New Segment Type</h3>
+      <button class="modal-close" onclick="hideModal('createSegmentTypeModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="createSegmentTypeForm">
+        <div class="form-group">
+          <label>Type Name*</label>
+          <input type="text" name="name" placeholder="e.g., rideshare, lodging" required>
+          <small>Lowercase, underscore separated (e.g., car_rental)</small>
+        </div>
+        <div class="form-group">
+          <label>Display Name*</label>
+          <input type="text" name="displayName" placeholder="e.g., Rideshare, Lodging" required>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea name="description" placeholder="Brief description of this travel service type"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Default Timezone</label>
+          <select name="defaultTimezone">
+            <option value="America/New_York">Eastern Time</option>
+            <option value="America/Chicago">Central Time</option>
+            <option value="America/Denver">Mountain Time</option>
+            <option value="America/Los_Angeles">Pacific Time</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>AI Parsing Prompt*</label>
+          <textarea name="parsingPrompt" rows="8" placeholder="AI prompt for parsing this type of email..." required></textarea>
+          <small>Use {{emailContent}} placeholder for the email content</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" onclick="hideModal('createSegmentTypeModal')">Cancel</button>
+          <button type="submit">Create Segment Type</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Create Classification Rule Modal -->
+<div id="createRuleModal" class="modal" style="display: none;">
+  <div class="modal-backdrop" onclick="hideModal('createRuleModal')"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>➕ Create Classification Rule</h3>
+      <button class="modal-close" onclick="hideModal('createRuleModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="createRuleForm">
+        <div class="form-group">
+          <label>Rule Name*</label>
+          <input type="text" name="ruleName" placeholder="e.g., uber_sender_email" required>
+        </div>
+        <div class="form-group">
+          <label>Segment Type*</label>
+          <select name="segmentType" required>
+            <option value="">Select segment type...</option>
+            <option value="flight">Flight</option>
+            <option value="hotel">Hotel</option>
+            <option value="car_rental">Car Rental</option>
+            <option value="private_terminal">Private Terminal</option>
+            <option value="rideshare">Rideshare</option>
+            <option value="lodging">Lodging</option>
+            <option value="food_delivery">Food Delivery</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Rule Type*</label>
+          <select name="ruleType" required>
+            <option value="keyword">Keyword Match</option>
+            <option value="sender">Sender Email</option>
+            <option value="subject">Subject Pattern</option>
+            <option value="regex">Regular Expression</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Pattern*</label>
+          <input type="text" name="pattern" placeholder="e.g., @uber.com, uber receipt" required>
+          <small>The text/pattern to match in emails</small>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <input type="number" name="priority" value="10" min="1" max="100">
+          <small>Higher numbers = higher priority (checked first)</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" name="isActive" checked> Active Rule
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" onclick="hideModal('createRuleModal')">Cancel</button>
+          <button type="submit">Create Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Create Prompt Modal -->
+<div id="createPromptModal" class="modal" style="display: none;">
+  <div class="modal-backdrop" onclick="hideModal('createPromptModal')"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>➕ Create AI Parsing Prompt</h3>
+      <button class="modal-close" onclick="hideModal('createPromptModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="createPromptForm">
+        <div class="form-group">
+          <label>Prompt Name*</label>
+          <input type="text" name="name" placeholder="e.g., email_parsing_rideshare" required>
+        </div>
+        <div class="form-group">
+          <label>Segment Type*</label>
+          <select name="type" required>
+            <option value="">Select segment type...</option>
+            <option value="flight">Flight</option>
+            <option value="hotel">Hotel</option>
+            <option value="car_rental">Car Rental</option>
+            <option value="private_terminal">Private Terminal</option>
+            <option value="rideshare">Rideshare</option>
+            <option value="lodging">Lodging</option>
+            <option value="food_delivery">Food Delivery</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Category*</label>
+          <select name="category" required>
+            <option value="parsing">Parsing</option>
+            <option value="classification">Classification</option>
+            <option value="validation">Validation</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Version</label>
+          <input type="number" name="version" value="1" min="1">
+        </div>
+        <div class="form-group">
+          <label>Prompt Content*</label>
+          <textarea name="prompt" rows="12" placeholder="Enter the AI prompt for parsing this segment type..." required></textarea>
+          <small>Use {{emailContent}} as placeholder for email content</small>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" name="isActive" checked> Set as Active
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" onclick="hideModal('createPromptModal')">Cancel</button>
+          <button type="submit">Create Prompt</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Segment Type Modal -->
+<div id="editSegmentTypeModal" class="modal" style="display: none;">
+  <div class="modal-backdrop" onclick="hideModal('editSegmentTypeModal')"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>✏️ Edit Segment Type</h3>
+      <button class="modal-close" onclick="hideModal('editSegmentTypeModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="editSegmentTypeForm">
+        <input type="hidden" name="originalName" id="editSegmentTypeName">
+        <div class="form-group">
+          <label>Display Name*</label>
+          <input type="text" name="displayName" id="editDisplayName" required>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea name="description" id="editDescription"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Default Timezone</label>
+          <select name="defaultTimezone" id="editDefaultTimezone">
+            <option value="America/New_York">Eastern Time</option>
+            <option value="America/Chicago">Central Time</option>
+            <option value="America/Denver">Mountain Time</option>
+            <option value="America/Los_Angeles">Pacific Time</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" name="isActive" id="editIsActive"> Active
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" onclick="hideModal('editSegmentTypeModal')">Cancel</button>
+          <button type="submit">Update Segment Type</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Test Classification Modal -->
+<div id="testClassificationModal" class="modal" style="display: none;">
+  <div class="modal-backdrop" onclick="hideModal('testClassificationModal')"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🧪 Test Email Classification</h3>
+      <button class="modal-close" onclick="hideModal('testClassificationModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="testClassificationForm">
+        <div class="form-group">
+          <label>Email Subject</label>
+          <input type="text" name="subject" placeholder="e.g., Your Uber receipt">
+        </div>
+        <div class="form-group">
+          <label>Sender Email</label>
+          <input type="email" name="sender" placeholder="e.g., noreply@uber.com">
+        </div>
+        <div class="form-group">
+          <label>Email Content</label>
+          <textarea name="content" rows="6" placeholder="Paste email content here..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" onclick="hideModal('testClassificationModal')">Cancel</button>
+          <button type="submit">Test Classification</button>
+        </div>
+      </form>
+      <div id="testResults" style="margin-top: 20px;"></div>
+    </div>
+  </div>
+</div>
