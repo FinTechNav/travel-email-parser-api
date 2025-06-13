@@ -13,8 +13,9 @@ const healthRoutes = require('./routes/health');
 const webhookRoutes = require('./routes/webhooks');
 const authRoutes = require('./routes/auth');
 const docsRoutes = require('./routes/docs');
+const adminRoutes = require('./routes/admin');
 
-// Import middleware
+// Import middlewar e
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
 const requestLogger = require('./middleware/requestLogger');
@@ -23,6 +24,8 @@ const app = express();
 
 const promptRoutes = require('./routes/prompts');
 app.use('/api/v1/prompts', promptRoutes);
+
+app.use('/api/v1/admin', adminRoutes);
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
