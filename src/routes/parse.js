@@ -390,4 +390,26 @@ router.get('/stats', authMiddleware, async (req, res, next) => {
   }
 });
 
+// DELETE /api/v1/parse/segment/:id - Delete segment and mark email as unprocessed
+router.delete('/segment/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const deleted = await emailProcessor.deleteSegment(req.params.id, req.user.id);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: 'Segment not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Segment deleted successfully',
+    });
+  } catch (error) {
+    logger.error('Failed to delete segment:', error);
+    next(error);
+  }
+});
+
 module.exports = router;

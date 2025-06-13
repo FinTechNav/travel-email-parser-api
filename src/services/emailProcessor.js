@@ -485,6 +485,78 @@ class EmailProcessor {
     }
   }
 
+  // Add this method to the EmailProcessor class in src/services/emailProcessor.js
+  async deleteSegment(segmentId, userId) {
+    try {
+      // First get the segment to check ownership and get raw email
+      const segment = await this.prisma.segment.findFirst({
+        where: {
+          id: segmentId,
+          itinerary: {
+            userId,
+          },
+        },
+        include: {
+          itinerary: true,
+        },
+      });
+
+      if (!segment) {
+        return false;
+      }
+
+      // If this segment has raw email content, mark the email as unprocessed
+      if (segment.rawEmail) {
+        await this.markEmailAsUnprocessed(segment.rawEmail);
+      }
+
+      // Delete the segment
+      await this.prisma.segment.delete({
+        where: { id: segmentId },
+      });
+
+      // Update itinerary dates after segment deletion
+      await this.updateItineraryDates(segment.itineraryId);
+
+      // Check if itinerary is now empty and delete it
+      const remainingSegments = await this.prisma.segment.count({
+        where: { itineraryId: segment.itineraryId },
+      });
+
+      if (remainingSegments === 0) {
+        await this.prisma.itinerary.delete({
+          where: { id: segment.itineraryId },
+        });
+        logger.debug(`Deleted empty itinerary ${segment.itineraryId}`);
+      }
+
+      logger.info(`Deleted segment ${segmentId} and marked email as unprocessed`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to delete segment:', error);
+      throw error;
+    }
+  }
+
+  // Add this method to mark email as unprocessed
+  async markEmailAsUnprocessed(rawEmail) {
+    try {
+      // Generate the same hash that was used when processing
+      const crypto = require('crypto');
+      const emailHash = crypto.createHash('sha256').update(rawEmail).digest('hex');
+
+      // Remove from processed emails table
+      await this.prisma.processedEmail.deleteMany({
+        where: { emailHash },
+      });
+
+      logger.debug(`Marked email as unprocessed: ${emailHash.substring(0, 8)}...`);
+    } catch (error) {
+      logger.error('Failed to mark email as unprocessed:', error);
+      // Don't throw - this is not critical for segment deletion
+    }
+  }
+
   async getUserStats(userId) {
     try {
       const [totalItineraries, totalSegments, segmentsByType, recentActivity] = await Promise.all([

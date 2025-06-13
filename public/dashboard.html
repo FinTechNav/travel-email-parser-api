@@ -498,6 +498,24 @@
       <div class="status-bar" id="statusBar">
         <span class="status-indicator status-loading" id="statusIndicator"></span>
         <span id="statusText">Ready to connect...</span>
+        <button
+          onclick="deleteAllSegments()"
+          style="
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-left: auto;
+            transition: all 0.2s ease;
+          "
+          onmouseover="this.style.background='#c82333'"
+          onmouseout="this.style.background='#dc3545'"
+        >
+          🗑️ Delete All Records
+        </button>
       </div>
 
       <div class="results-container" id="resultsContainer">

@@ -212,15 +212,30 @@ function formatDateRange(startDate, endDate) {
 }
 
 // Render segment
+
+// In public/dashboard.js - Replace the renderSegment function
 function renderSegment(segment) {
   const details = segment.details || {};
 
   return `
-        <div class="segment-card segment-${segment.type}">
+        <div class="segment-card segment-${segment.type}" data-segment-id="${segment.id}">
             <div class="segment-header">
                 <span class="segment-type">${segment.type.replace('_', ' ')}</span>
                 ${segment.confirmationNumber ? `<span class="confirmation-number">${segment.confirmationNumber}</span>` : ''}
                 ${details.flight_number ? `<span class="flight-number" style="background: rgba(0,123,255,0.1); color: #007bff; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; margin-left: 8px;">${details.flight_number}</span>` : ''}
+                <button class="delete-btn" onclick="deleteSegment('${segment.id}')" style="
+                    background: #dc3545; 
+                    color: white; 
+                    border: none; 
+                    padding: 4px 8px; 
+                    border-radius: 6px; 
+                    font-size: 0.7rem; 
+                    cursor: pointer; 
+                    margin-left: auto;
+                    transition: all 0.2s ease;
+                " onmouseover="this.style.background='#c82333'" onmouseout="this.style.background='#dc3545'">
+                    🗑️ Delete
+                </button>
             </div>
             
             ${
@@ -383,6 +398,84 @@ async function refreshUsers() {
   updateUserDropdown('Refreshing users...');
   updateApiUrl(); // Make sure API URL is current
   await loadUsers();
+}
+
+// Delete segment function
+async function deleteSegment(segmentId) {
+  if (
+    !confirm(
+      'Are you sure you want to delete this travel segment? This will also mark the original email as unprocessed so it can be re-parsed.'
+    )
+  ) {
+    return;
+  }
+
+  try {
+    updateStatus('loading', 'Deleting segment...');
+
+    const response = await apiRequest(`/parse/segment/${segmentId}`, {
+      method: 'DELETE',
+    });
+
+    if (response.success) {
+      updateStatus('connected', 'Segment deleted successfully');
+
+      // Remove the segment card from the DOM
+      const segmentCard = document.querySelector(`[data-segment-id="${segmentId}"]`);
+      if (segmentCard) {
+        segmentCard.style.transition = 'opacity 0.3s ease';
+        segmentCard.style.opacity = '0';
+        setTimeout(() => {
+          segmentCard.remove();
+
+          // Check if itinerary is now empty
+          const itineraryCard = segmentCard.closest('.email-result');
+          const remainingSegments = itineraryCard.querySelectorAll('.segment-card');
+          if (remainingSegments.length === 0) {
+            itineraryCard.style.transition = 'opacity 0.3s ease';
+            itineraryCard.style.opacity = '0';
+            setTimeout(() => {
+              itineraryCard.remove();
+              // Refresh the entire view
+              loadItineraries();
+            }, 300);
+          }
+        }, 300);
+      }
+    } else {
+      updateStatus('error', `Failed to delete segment: ${response.message}`);
+    }
+  } catch (error) {
+    console.error('Error deleting segment:', error);
+    updateStatus('error', `Delete failed: ${error.message}`);
+  }
+}
+
+// Add bulk delete function (optional)
+async function deleteAllSegments() {
+  if (
+    !confirm(
+      'Are you sure you want to delete ALL travel segments? This will mark all emails as unprocessed.'
+    )
+  ) {
+    return;
+  }
+
+  const segmentCards = document.querySelectorAll('[data-segment-id]');
+  const deletePromises = [];
+
+  for (const card of segmentCards) {
+    const segmentId = card.getAttribute('data-segment-id');
+    deletePromises.push(deleteSegment(segmentId));
+  }
+
+  try {
+    await Promise.all(deletePromises);
+    updateStatus('connected', 'All segments deleted');
+    loadItineraries(); // Refresh the view
+  } catch (error) {
+    updateStatus('error', 'Some deletions failed');
+  }
 }
 
 // Wait for DOM to be ready
