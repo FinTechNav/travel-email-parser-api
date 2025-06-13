@@ -885,12 +885,6 @@ class EmailProcessor {
           specificSubject,
           specificSubject.replace('Fwd: ', ''),
           specificSubject.replace('Re: ', ''),
-          // For hotel emails, try hotel-specific matching
-          specificSubject.includes('Thompson')
-            ? 'Reservation Details for Your Upcoming Stay at Thompson Austin'
-            : null,
-          // For flight emails, try flight-specific matching
-          specificSubject.includes('SkyMiles') ? 'Congrats On Your SkyMiles Award Trip' : null,
         ].filter(Boolean);
 
         for (const subject of subjectVariations) {

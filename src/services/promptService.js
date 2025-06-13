@@ -293,23 +293,15 @@ ${this.formatExtractedTimes(extractedTimes)}`;
   }
 
   // Fallback methods for when database is not available
+
   getDefaultClassificationPrompt(emailContent) {
     return `
-    Classify this email as one of: flight, hotel, car_rental, train, cruise, restaurant, event, other
-    
-    Look for keywords like:
-    - Flight: airline, flight, boarding, gate, departure, arrival
-    - Hotel: hotel, reservation, check-in, check-out, room
-    - Car rental: rental, car, pickup, return, vehicle
-    - Train: train, rail, platform, coach, seat
-    - Cruise: cruise, ship, cabin, sailing
-    - Restaurant: restaurant, reservation, table, dining
-    - Event: ticket, event, concert, show, venue
-    
-    Email content: ${emailContent}...
-    
-    Respond with only the classification word.
-    `;
+  Classify this email as one of: flight, hotel, car_rental, train, cruise, restaurant, event, other
+  
+  Email content: ${emailContent.substring(0, 500)}...
+  
+  Respond with only the classification word.
+  `;
   }
 
   getDefaultParsingPrompt(emailContent, emailType, extractedTimes) {
