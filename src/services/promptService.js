@@ -66,6 +66,10 @@ class PromptService {
   }
 
   // Create parsing prompt with dynamic email type
+
+  // REPLACE the getParsingPrompt method in src/services/promptService.js
+
+  // Create parsing prompt with dynamic email type
   async getParsingPrompt(emailContent, emailType, extractedTimes = []) {
     // Get base parsing template
     const baseTemplate = await this.getPromptTemplate('parsing', 'base');
@@ -78,17 +82,43 @@ class PromptService {
       return this.getDefaultParsingPrompt(emailContent, emailType, extractedTimes);
     }
 
-    // Combine base and type-specific prompts
+    // Handle special flight case (different structure)
+    if (emailType === 'flight' && typeTemplate) {
+      // Flight templates are complete and don't need base template
+      const timeParsingInstructions = `
+CRITICAL TIME PARSING RULES:
+- Convert ALL times to 24-hour format (HH:MM) 
+- Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
+- Look for exact phrases: "pickup at", "check-in", "check-out", "departure", "arrival"
+- Pay close attention to AM/PM indicators
+- If time seems wrong, double-check the original email text
+- Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
+- Common car rental: pickup/return during business hours 08:00-18:00
+
+EXTRACTED TIMES FROM EMAIL:
+${this.formatExtractedTimes(extractedTimes)}`;
+
+      return this.interpolatePrompt(typeTemplate.prompt, {
+        emailContent,
+        emailType,
+        timeParsingInstructions,
+      });
+    }
+
+    // For hotels and car rentals, combine base + type-specific
     let fullPrompt = baseTemplate.prompt;
 
     if (typeTemplate) {
       fullPrompt += '\n\n' + typeTemplate.prompt;
     }
 
+    // Format extracted times properly
+    const formattedTimes = this.formatExtractedTimes(extractedTimes);
+
     return this.interpolatePrompt(fullPrompt, {
       emailContent,
       emailType,
-      extractedTimes: this.formatExtractedTimes(extractedTimes),
+      extractedTimes: formattedTimes,
     });
   }
 

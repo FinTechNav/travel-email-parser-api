@@ -1,14 +1,14 @@
 // src/routes/prompts.js - API endpoints for prompt management
 const express = require('express');
 const PromptService = require('../services/promptService');
-const { authenticateToken } = require('../middleware/auth');
+const authMiddleware = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 const promptService = new PromptService();
 
 // Get all prompt templates
-router.get('/templates', authenticateToken, async (req, res) => {
+router.get('/templates', authMiddleware, async (req, res) => {
   try {
     const { category, type, active } = req.query;
 
@@ -41,7 +41,7 @@ router.get('/templates', authenticateToken, async (req, res) => {
 });
 
 // Get specific prompt template
-router.get('/templates/:id', authenticateToken, async (req, res) => {
+router.get('/templates/:id', authMiddleware, async (req, res) => {
   try {
     const template = await promptService.prisma.promptTemplate.findUnique({
       where: { id: req.params.id },
@@ -74,7 +74,7 @@ router.get('/templates/:id', authenticateToken, async (req, res) => {
 });
 
 // Create new prompt template
-router.post('/templates', authenticateToken, async (req, res) => {
+router.post('/templates', authMiddleware, async (req, res) => {
   try {
     const { name, category, type, prompt, variables, metadata, testGroup } = req.body;
 
@@ -110,7 +110,7 @@ router.post('/templates', authenticateToken, async (req, res) => {
 });
 
 // Update prompt template (creates new version)
-router.post('/templates/:id/version', authenticateToken, async (req, res) => {
+router.post('/templates/:id/version', authMiddleware, async (req, res) => {
   try {
     const existingTemplate = await promptService.prisma.promptTemplate.findUnique({
       where: { id: req.params.id },
@@ -150,7 +150,7 @@ router.post('/templates/:id/version', authenticateToken, async (req, res) => {
 });
 
 // Activate prompt template
-router.post('/templates/:id/activate', authenticateToken, async (req, res) => {
+router.post('/templates/:id/activate', authMiddleware, async (req, res) => {
   try {
     await promptService.activatePromptTemplate(req.params.id);
 
@@ -168,7 +168,7 @@ router.post('/templates/:id/activate', authenticateToken, async (req, res) => {
 });
 
 // Get prompt usage analytics
-router.get('/analytics', authenticateToken, async (req, res) => {
+router.get('/analytics', authMiddleware, async (req, res) => {
   try {
     const { category, type, days = 7 } = req.query;
 
@@ -254,7 +254,7 @@ router.get('/analytics', authenticateToken, async (req, res) => {
 });
 
 // Test prompt with sample email
-router.post('/test', authenticateToken, async (req, res) => {
+router.post('/test', authMiddleware, async (req, res) => {
   try {
     const { templateId, emailContent, emailType } = req.body;
 
@@ -305,7 +305,7 @@ router.post('/test', authenticateToken, async (req, res) => {
 });
 
 // AI Configuration endpoints
-router.get('/ai-config', authenticateToken, async (req, res) => {
+router.get('/ai-config', authMiddleware, async (req, res) => {
   try {
     const configs = await promptService.prisma.aIConfiguration.findMany({
       orderBy: { updatedAt: 'desc' },
@@ -324,7 +324,7 @@ router.get('/ai-config', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/ai-config', authenticateToken, async (req, res) => {
+router.post('/ai-config', authMiddleware, async (req, res) => {
   try {
     const { name, model, temperature, maxTokens, metadata } = req.body;
 
@@ -359,7 +359,7 @@ router.post('/ai-config', authenticateToken, async (req, res) => {
   }
 });
 
-router.post('/ai-config/:id/activate', authenticateToken, async (req, res) => {
+router.post('/ai-config/:id/activate', authMiddleware, async (req, res) => {
   try {
     // Deactivate all other configs
     await promptService.prisma.aIConfiguration.updateMany({
