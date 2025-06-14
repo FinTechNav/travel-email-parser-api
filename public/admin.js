@@ -450,8 +450,14 @@ async function loadClassificationRules() {
       const allRules = segmentTypes.flatMap(type => 
         (type.classificationRules || []).map(rule => ({ ...rule, segmentType: type.name }))
       );
-      displayClassificationRules(allRules);
-      document.getElementById('ruleCount').textContent = `${allRules.length} rules`;
+      
+      // DEDUPLICATE by rule ID
+      const uniqueRules = allRules.filter((rule, index, self) => 
+        index === self.findIndex(r => r.id === rule.id)
+      );
+      
+      displayClassificationRules(uniqueRules);
+      document.getElementById('ruleCount').textContent = `${uniqueRules.length} rules`;
     } else {
       throw new Error('Failed to load rules');
     }
