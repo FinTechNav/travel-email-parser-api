@@ -13,49 +13,41 @@ const prisma = new PrismaClient();
 
 router.get('/segment-types', async (req, res) => {
   try {
-    const segmentTypes = await prisma.segmentTypeConfig.findMany({
-      include: {
-        classification_rules: {  // Changed from classificationRules
-          where: {
-            isActive: true
-          },
-          select: {
-            id: true,
-            name: true,
-            pattern: true,
-            type: true,
-            priority: true,
-            isActive: true
-          },
-          orderBy: {
-            priority: "desc"
-          }
-        },
-        timezone_rules: {  // Changed from timezoneRules
-          select: {
-            id: true,
-            locationPattern: true,
-            timezone: true,
-            priority: true
-          },
-          orderBy: {
-            priority: "desc"
-          }
-        },
-        display_rules: {  // Changed from displayRules
-          select: {
-            id: true,
-            primaryTimeField: true,
-            timezoneSource: true,
-            routeFormat: true,
-            customFields: true
-          }
-        }
+const segmentTypes = await prisma.segmentTypeConfig.findMany({
+  include: {
+    classification_rules: {  // ← Changed from classificationRules
+      where: { is_active: true },
+      select: {
+        id: true,
+        name: true, 
+        pattern: true,
+        type: true,
+        priority: true,
+        is_active: true  // ← Changed from isActive
       },
-      orderBy: {
-        name: "asc"
+      orderBy: { priority: "desc" }
+    },
+    timezone_rules: {        // ← Changed from timezoneRules
+      select: {
+        id: true,
+        location_pattern: true,  // ← Changed from locationPattern
+        timezone: true,
+        priority: true
+      },
+      orderBy: { priority: "desc" }
+    },
+    display_rules: {         // ← Changed from displayRules
+      select: {
+        id: true,
+        primary_time_field: true,    // ← Changed from primaryTimeField
+        timezone_source: true,       // ← Changed from timezoneSource
+        route_format: true,          // ← Changed from routeFormat
+        custom_fields: true          // ← Changed from customFields
       }
-    });
+    }
+  },
+  orderBy: { name: "asc" }
+});
 
     // Transform for frontend compatibility (keeping camelCase for frontend)
     const transformedTypes = segmentTypes.map(type => ({
