@@ -685,7 +685,7 @@ async function loadPrompts() {
   
   container.innerHTML = tableHTML;
   setupPromptActionListeners();
-}
+
 
 // Helper functions for display
 function getSuccessRateClass(rate) {
@@ -1000,6 +1000,24 @@ function populatePromptEditModal(prompt) {
   document.getElementById('editPromptActive').checked = prompt.isActive;
 }
 
+// Add this function anywhere in your admin.js file:
+function setupPromptActionListeners() {
+  // Setup event listeners for prompt actions
+  document.querySelectorAll('[data-action="edit-prompt"]').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      editPrompt(promptId);
+    });
+  });
+  
+  document.querySelectorAll('[data-action="toggle-prompt"]').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      const newState = e.target.getAttribute('data-active') === 'true';
+      togglePromptStatus(promptId, newState);
+    });
+  });
+}
 // =====================================================================
 // FORM SUBMISSION HANDLERS
 // =====================================================================
