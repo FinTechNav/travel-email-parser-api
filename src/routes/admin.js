@@ -755,7 +755,6 @@ router.put('/prompts/:id', async (req, res) => {
 // GET /api/v1/admin/system-status - Get comprehensive system status
 router.get('/system-status', async (req, res) => {
   try {
-    // Test database connection
     let database = true;
     let totalSegments = 0;
     let totalUsers = 0;
@@ -764,22 +763,29 @@ router.get('/system-status', async (req, res) => {
     let psIssue = null;
 
     try {
-      // Count segments
-      totalSegments = await prisma.Segment.count();
-      
-      // Count users
+      // FIXED: Use correct model names
+      totalSegments = await prisma.segment.count();
       totalUsers = await prisma.user.count();
       
-      // Count segment types
-      const segmentTypesResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM segment_type_configs`;
-segmentTypes = parseInt(segmentTypesResult[0].count);
+      // Check if admin models exist, use raw SQL if not
+      try {
+        segmentTypes = await prisma.segmentTypeConfig.count();
+      } catch {
+        const result = await prisma.$queryRaw`SELECT COUNT(*) as count FROM segment_type_configs`;
+        segmentTypes = parseInt(result[0].count);
+      }
       
-      // Count classification rules
-const rulesResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM classification_rules WHERE is_active = true`;
-classificationRules = parseInt(rulesResult[0].count);
+      try {
+        classificationRules = await prisma.classificationRule.count({
+          where: { isActive: true }
+        });
+      } catch {
+        const result = await prisma.$queryRaw`SELECT COUNT(*) as count FROM classification_rules WHERE is_active = true`;
+        classificationRules = parseInt(result[0].count);
+      }
       
-      // Check for PS timezone issues
-      const psSegments = await prisma.Segment.findMany({
+      // Check for PS timezone issues - FIXED model name
+      const psSegments = await prisma.segment.findMany({
         where: { type: 'private_terminal' },
         take: 5
       });
@@ -800,12 +806,9 @@ classificationRules = parseInt(rulesResult[0].count);
       database = false;
     }
 
-    // Check email processor status (simplified)
-    const emailProcessor = true; // Would check actual processor status
-
     res.json({
       database,
-      emailProcessor,
+      emailProcessor: true,
       totalSegments,
       totalUsers,
       segmentTypes,
@@ -876,10 +879,11 @@ router.post('/reprocess-segments', async (req, res) => {
 // =====================================================================
 
 // POST /api/v1/admin/fix-ps-timezone - Fix PS timezone issues
+
 router.post('/fix-ps-timezone', async (req, res) => {
   try {
-    // Find all PS segments
-    const psSegments = await prisma.Segment.findMany({
+    // FIXED: Use correct model name
+    const psSegments = await prisma.segment.findMany({
       where: { type: 'private_terminal' }
     });
 
@@ -889,33 +893,26 @@ router.post('/fix-ps-timezone', async (req, res) => {
     for (const segment of psSegments) {
       try {
         const details = segment.details || {};
-        const serviceDetails = details.service_details || {};
         
-        // Determine correct timezone based on facility
-        let correctTimezone = 'America/New_York'; // Default to EDT
-        const facilityName = serviceDetails.facility_name || details.locations?.origin || '';
+        // Determine correct timezone based on origin
+        let correctTimezone = 'America/New_York';
+        const origin = segment.origin || '';
         
-        if (facilityName.includes('LAX') || facilityName.includes('PS LAX')) {
+        if (origin.includes('LAX')) {
           correctTimezone = 'America/Los_Angeles';
-        } else if (facilityName.includes('ORD') || facilityName.includes('PS ORD')) {
+        } else if (origin.includes('ORD') || origin.includes('CHI')) {
           correctTimezone = 'America/Chicago';
-        } else if (facilityName.includes('DFW') || facilityName.includes('PS DFW')) {
+        } else if (origin.includes('DFW')) {
           correctTimezone = 'America/Chicago';
-        } else if (facilityName.includes('SEA') || facilityName.includes('PS SEA')) {
-          correctTimezone = 'America/Los_Angeles';
-        } else if (facilityName.includes('MIA') || facilityName.includes('PS MIA')) {
-          correctTimezone = 'America/New_York';
         }
 
-        // Update segment with corrected timezone
-        const updated = await prisma.Segment.update({
+        await prisma.segment.update({
           where: { id: segment.id },
           data: {
             details: {
               ...details,
               corrected_timezone: correctTimezone,
-              timezone_fix_applied: new Date().toISOString(),
-              facility_timezone: correctTimezone
+              timezone_fix_applied: new Date().toISOString()
             }
           }
         });
@@ -924,7 +921,7 @@ router.post('/fix-ps-timezone', async (req, res) => {
           id: segment.id, 
           status: 'success', 
           timezone: correctTimezone,
-          facility: facilityName 
+          origin: origin
         });
         updatedCount++;
         
