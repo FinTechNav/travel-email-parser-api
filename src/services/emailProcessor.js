@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const AIParser = require('./aiParser');
 const Validator = require('./validator');
 const Enhancer = require('./enhancer');
+const TimezoneService = require('./timezoneService'); 
 const logger = require('../utils/logger');
 const { differenceInDays, parseISO, isValid } = require('date-fns');
 const EmailRulesService = require('./emailRulesService');
@@ -14,6 +15,7 @@ class EmailProcessor {
     this.validator = new Validator();
     this.enhancer = new Enhancer();
     this.emailRulesService = new EmailRulesService();
+    this.timezoneService = new TimezoneService(this.prisma);
   }
 
   /**
@@ -188,90 +190,138 @@ class EmailProcessor {
     }
   }
 
-inferTimezoneFromLocation(data) {
-  if (!data) return null;
+async inferTimezoneFromLocation(data) {
+    if (!data) return null;
 
-  const locationTimezones = {
-    // PS Private Terminal Facilities (CRITICAL: Use facility timezone, not destination)
-    'ps atl': 'America/New_York',     // PS Atlanta → Eastern Time
-    'ps lax': 'America/Los_Angeles',  // PS Los Angeles → Pacific Time
-    'ps jfk': 'America/New_York',     // PS JFK → Eastern Time
-    'ps ord': 'America/Chicago',      // PS Chicago → Central Time
+    // Check if we should use API lookup (configurable via environment variable)
+    const useTimezoneAPI = process.env.USE_TIMEZONE_API === 'true';
 
-    // US Cities and Airports
-    atlanta: 'America/New_York',
-    atl: 'America/New_York',
-    austin: 'America/Chicago',
-    aus: 'America/Chicago',
-    'new york': 'America/New_York',
-    nyc: 'America/New_York',
-    'los angeles': 'America/Los_Angeles',
-    lax: 'America/Los_Angeles',
-    chicago: 'America/Chicago',
-    ord: 'America/Chicago',
-    denver: 'America/Denver',
-    den: 'America/Denver',
-    phoenix: 'America/Phoenix',
-    phx: 'America/Phoenix',
-    miami: 'America/New_York',
-    mia: 'America/New_York',
-    seattle: 'America/Los_Angeles',
-    sea: 'America/Los_Angeles',
-
-    // International
-    london: 'Europe/London',
-    paris: 'Europe/Paris',
-    tokyo: 'Asia/Tokyo',
-    sydney: 'Australia/Sydney',
-  };
-
-  // SPECIAL HANDLING for private terminals
-  if (data?.type === 'private_terminal') {
-    const facilityName = data?.service_details?.facility_name || data?.locations?.origin;
-    if (facilityName) {
-      const normalizedFacility = facilityName.toLowerCase().trim();
-      if (locationTimezones[normalizedFacility]) {
-        console.log(`🌎 Using PS facility timezone: ${facilityName} → ${locationTimezones[normalizedFacility]}`);
-        return locationTimezones[normalizedFacility];
+    if (useTimezoneAPI) {
+      // NEW: Try API lookup first for unknown locations
+      let location = null;
+      
+      // Special handling for private terminals - use facility timezone
+      if (data?.type === 'private_terminal') {
+        const facilityName = data?.service_details?.facility_name || data?.locations?.origin;
+        if (facilityName) {
+          const timezone = await this.timezoneService.getTimezone(facilityName);
+          if (timezone) {
+            logger.debug(`API: Using PS facility timezone: ${facilityName} → ${timezone}`);
+            return timezone;
+          }
+        }
       }
-    }
-    
-    const origin = data?.locations?.origin;
-    if (origin) {
-      const normalizedOrigin = origin.toLowerCase().trim();
-      for (const [key, timezone] of Object.entries(locationTimezones)) {
-        if (key.startsWith('ps ') && normalizedOrigin.includes(key)) {
-          console.log(`🌎 Using PS origin timezone: ${origin} → ${timezone}`);
+
+      // For other types, try API lookup
+      if (data?.locations?.origin) {
+        location = data.locations.origin;
+      } else if (data?.locations?.destination) {
+        location = data.locations.destination;
+      }
+
+      if (location) {
+        const timezone = await this.timezoneService.getTimezone(location);
+        if (timezone) {
+          logger.debug(`API: Found timezone for ${location} → ${timezone}`);
           return timezone;
         }
       }
     }
-  }
 
-  // Check destination first, then origin (for non-PS bookings)
-  const locations = [
-    data?.locations?.destination,
-    data?.locations?.origin,
-    data?.details?.hotel_address,
-    data?.details?.pickup_location,
-  ].filter(Boolean);
+    // EXISTING: Fallback to your current hardcoded mapping (unchanged)
+    const locationTimezones = {
+      // PS Private Terminal Facilities (CRITICAL: Use facility timezone, not destination)
+      'ps atl': 'America/New_York',     // PS Atlanta → Eastern Time
+      'ps lax': 'America/Los_Angeles',  // PS Los Angeles → Pacific Time
+      'ps jfk': 'America/New_York',     // PS JFK → Eastern Time
+      'ps ord': 'America/Chicago',      // PS Chicago → Central Time
 
-  for (const location of locations) {
-    const normalizedLocation = location.toLowerCase().trim();
+      // US Cities and Airports
+      atlanta: 'America/New_York',
+      atl: 'America/New_York',
+      austin: 'America/Chicago',
+      aus: 'America/Chicago',
+      'new york': 'America/New_York',
+      nyc: 'America/New_York',
+      'los angeles': 'America/Los_Angeles',
+      lax: 'America/Los_Angeles',
+      chicago: 'America/Chicago',
+      ord: 'America/Chicago',
+      denver: 'America/Denver',
+      den: 'America/Denver',
+      phoenix: 'America/Phoenix',
+      phx: 'America/Phoenix',
+      miami: 'America/New_York',
+      mia: 'America/New_York',
+      seattle: 'America/Los_Angeles',
+      sea: 'America/Los_Angeles',
 
-    if (locationTimezones[normalizedLocation]) {
-      return locationTimezones[normalizedLocation];
-    }
+      // European locations - ADD THESE TO FIX MADRID
+      madrid: 'Europe/Madrid',
+      mad: 'Europe/Madrid',
+      'madrid, spain': 'Europe/Madrid',
+      spain: 'Europe/Madrid',
+      barcelona: 'Europe/Madrid',
+      bcn: 'Europe/Madrid',
+      
+      london: 'Europe/London',
+      lhr: 'Europe/London',
+      lgw: 'Europe/London',
+      
+      paris: 'Europe/Paris',
+      cdg: 'Europe/Paris',
+      
+      amsterdam: 'Europe/Amsterdam',
+      ams: 'Europe/Amsterdam',
+      
+      frankfurt: 'Europe/Berlin',
+      fra: 'Europe/Berlin',
+      
+      rome: 'Europe/Rome',
+      fco: 'Europe/Rome',
+      
+      lisbon: 'Europe/Lisbon',
+      lis: 'Europe/Lisbon'
+    };
 
-    for (const [key, timezone] of Object.entries(locationTimezones)) {
-      if (normalizedLocation.includes(key)) {
-        return timezone;
+    // Special handling for private terminals
+    if (data?.type === 'private_terminal') {
+      // For PS, use facility location timezone (not destination)
+      const facilityName = data?.service_details?.facility_name || data?.locations?.origin;
+      if (facilityName) {
+        const normalizedFacility = facilityName.toLowerCase().trim();
+        if (locationTimezones[normalizedFacility]) {
+          logger.debug(`Using PS facility timezone: ${facilityName} → ${locationTimezones[normalizedFacility]}`);
+          return locationTimezones[normalizedFacility];
+        }
       }
     }
-  }
 
-  return null;
-}
+    // Extract location for timezone lookup
+    let primaryLocation = null;
+    if (data?.locations?.destination) {
+      primaryLocation = data.locations.destination.toLowerCase().trim();
+    } else if (data?.locations?.origin) {
+      primaryLocation = data.locations.origin.toLowerCase().trim();
+    }
+
+    if (primaryLocation) {
+      // Direct match
+      if (locationTimezones[primaryLocation]) {
+        return locationTimezones[primaryLocation];
+      }
+
+      // Partial match
+      for (const [key, timezone] of Object.entries(locationTimezones)) {
+        if (primaryLocation.includes(key)) {
+          return timezone;
+        }
+      }
+    }
+
+    // Final fallback
+    return null;
+  }
 
 
   async processEmail({ content, userEmail, userId, metadata = {} }) {
