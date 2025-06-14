@@ -10,12 +10,12 @@ datasource db {
 
 model User {
   id              String           @id @default(cuid())
-  email           String           @unique
-  name            String?
-  password        String
-  apiKey          String           @unique @default(cuid())
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  email           String           @unique @map("email")
+  name            String?          @map("name")
+  password        String           @map("password")
+  apiKey          String           @unique @default(cuid()) @map("api_key")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
   usage           ApiUsage[]
   itineraries     Itinerary[]
   processedEmails ProcessedEmail[]
@@ -25,13 +25,13 @@ model User {
 
 model Itinerary {
   id          String    @id @default(cuid())
-  userId      String
-  tripName    String?
-  startDate   DateTime?
-  endDate     DateTime?
-  destination String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  userId      String    @map("user_id")
+  tripName    String?   @map("trip_name")
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  destination String?   @map("destination")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   segments    Segment[]
 
@@ -42,16 +42,16 @@ model Itinerary {
 
 model Segment {
   id                 String    @id @default(cuid())
-  itineraryId        String
-  type               String
-  confirmationNumber String?
-  startDateTime      DateTime?
-  endDateTime        DateTime?
-  origin             String?
-  destination        String?
-  details            Json?
-  rawEmail           String?
-  parsedAt           DateTime  @default(now())
+  itineraryId        String    @map("itinerary_id")
+  type               String    @map("type")
+  confirmationNumber String?   @map("confirmation_number")
+  startDateTime      DateTime? @map("start_date_time")
+  endDateTime        DateTime? @map("end_date_time")
+  origin             String?   @map("origin")
+  destination        String?   @map("destination")
+  details            Json?     @map("details")
+  rawEmail           String?   @map("raw_email")
+  parsedAt           DateTime  @default(now()) @map("parsed_at")
   itinerary          Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
 
   @@index([itineraryId])
@@ -63,10 +63,10 @@ model Segment {
 
 model ApiUsage {
   id            String   @id @default(cuid())
-  userId        String
-  endpoint      String
-  requestsCount Int      @default(1)
-  date          DateTime @default(now())
+  userId        String   @map("user_id")
+  endpoint      String   @map("endpoint")
+  requestsCount Int      @default(1) @map("requests_count")
+  date          DateTime @default(now()) @map("date")
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, endpoint, date])
@@ -77,15 +77,15 @@ model ApiUsage {
 
 model ProcessedEmail {
   id          String   @id @default(cuid())
-  emailHash   String   @unique
-  messageId   String?
-  subject     String?
-  fromAddress String?
-  userId      String
-  processedAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  success     Boolean  @default(false)
-  source      String   @default("email_polling")
+  emailHash   String   @unique @map("email_hash")
+  messageId   String?  @map("message_id")
+  subject     String?  @map("subject")
+  fromAddress String?  @map("from_address")
+  userId      String   @map("user_id")
+  processedAt DateTime @default(now()) @map("processed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  success     Boolean  @default(false) @map("success")
+  source      String   @default("email_polling") @map("source")
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
@@ -98,22 +98,23 @@ model ProcessedEmail {
 }
 
 model PromptTemplate {
-  id                String        @id @default(cuid())
-  name              String        @unique
-  category          String
-  type              String
-  version           Int           @default(1)
-  prompt            String
-  variables         Json?
-  isActive          Boolean       @default(true)
-  metadata          Json?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  createdBy         String?
-  testGroup         String?
-  successRate       Float?
-  usageCount        Int           @default(0)
-  segment_type_name String?       @db.VarChar(50)
+  id              String   @id @default(cuid())
+  name            String   @unique @map("name")
+  category        String   @map("category")
+  type            String   @map("type")
+  version         Int      @default(1) @map("version")
+  prompt          String   @map("prompt")
+  variables       Json?    @map("variables")
+  isActive        Boolean  @default(true) @map("is_active")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdBy       String?  @map("created_by")
+  testGroup       String?  @map("test_group")
+  successRate     Float?   @map("success_rate")
+  usageCount      Int      @default(0) @map("usage_count")
+  segmentTypeName String?  @map("segment_type_name")
+
   usage             PromptUsage[]
 
   @@map("prompt_templates")
@@ -121,15 +122,15 @@ model PromptTemplate {
 
 model AIConfiguration {
   id           String   @id @default(cuid())
-  name         String   @unique
-  model        String
-  temperature  Float    @default(0.1)
-  maxTokens    Int      @default(2000)
-  isActive     Boolean  @default(true)
-  costPerToken Float?
-  metadata     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  name         String   @unique @map("name")
+  model        String   @map("model")
+  temperature  Float    @default(0.1) @map("temperature")
+  maxTokens    Int      @default(2000) @map("max_tokens")
+  isActive     Boolean  @default(true) @map("is_active")
+  costPerToken Float?   @map("cost_per_token")
+  metadata     Json?    @map("metadata")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("ai_configurations")
 }
@@ -151,17 +152,17 @@ model PromptUsage {
 
 model EmailClassificationRule {
   id              String   @id @default(cuid())
-  name            String   @unique
-  emailType       String
-  ruleType        String
-  pattern         String
-  priority        Int      @default(0)
-  isActive        Boolean  @default(true)
-  caseInsensitive Boolean  @default(true)
-  metadata        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String?
+  name            String   @unique @map("name")
+  emailType       String   @map("email_type")
+  ruleType        String   @map("rule_type")
+  pattern         String   @map("pattern")
+  priority        Int      @default(0) @map("priority")
+  isActive        Boolean  @default(true) @map("is_active")
+  caseInsensitive Boolean  @default(true) @map("case_insensitive")
+  metadata        Json?    @map("metadata")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdBy       String?  @map("created_by")
 
   @@index([emailType, ruleType])
   @@index([priority])
@@ -170,13 +171,13 @@ model EmailClassificationRule {
 
 model EmailSubjectPattern {
   id         String   @id @default(cuid())
-  name       String   @unique
-  emailType  String
-  pattern    String
-  variations Json?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  name       String   @unique @map("name")
+  emailType  String   @map("email_type")
+  pattern    String   @map("pattern")
+  variations Json?    @map("variations")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([emailType])
   @@map("email_subject_patterns")
@@ -184,13 +185,13 @@ model EmailSubjectPattern {
 
 model EmailProcessingConfig {
   id          String   @id @default(cuid())
-  category    String
-  key         String
-  value       Json
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  category    String   @map("category")
+  key         String   @map("key")
+  value       Json     @map("value")
+  description String?  @map("description")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([category, key])
   @@index([category])
@@ -199,14 +200,14 @@ model EmailProcessingConfig {
 
 model EmailSenderRule {
   id            String   @id @default(cuid())
-  name          String   @unique
-  senderPattern String
-  emailType     String?
-  trustLevel    String   @default("normal")
-  isActive      Boolean  @default(true)
-  metadata      Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  name          String   @unique @map("name")
+  senderPattern String   @map("sender_pattern")
+  emailType     String?  @map("email_type")
+  trustLevel    String   @default("normal") @map("trust_level")
+  isActive      Boolean  @default(true) @map("is_active")
+  metadata      Json?    @map("metadata")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([trustLevel])
   @@map("email_sender_rules")

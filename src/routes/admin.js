@@ -13,43 +13,51 @@ const prisma = new PrismaClient();
 
 router.get('/segment-types', async (req, res) => {
   try {
-const segmentTypes = await prisma.segmentTypeConfig.findMany({
-  include: {
-    classification_rules: {  // ← Changed from classificationRules
-      where: { is_active: true },
-      select: {
-        id: true,
-        name: true, 
-        pattern: true,
-        type: true,
-        priority: true,
-        is_active: true  // ← Changed from isActive
+    const segmentTypes = await prisma.segmentTypeConfig.findMany({
+      include: {
+        classification_rules: {
+          where: {
+            isActive: true  // ← Use Prisma field name (camelCase)
+          },
+          select: {
+            id: true,
+            name: true,
+            pattern: true,
+            type: true,
+            priority: true,
+            isActive: true  // ← Use Prisma field name (camelCase)
+          },
+          orderBy: {
+            priority: "desc"
+          }
+        },
+        timezone_rules: {
+          select: {
+            id: true,
+            locationPattern: true,  // ← Use Prisma field name (camelCase)
+            timezone: true,
+            priority: true
+          },
+          orderBy: {
+            priority: "desc"
+          }
+        },
+        display_rules: {
+          select: {
+            id: true,
+            primaryTimeField: true,    // ← Use Prisma field name (camelCase)
+            timezoneSource: true,      // ← Use Prisma field name (camelCase)
+            routeFormat: true,         // ← Use Prisma field name (camelCase)
+            customFields: true         // ← Use Prisma field name (camelCase)
+          }
+        }
       },
-      orderBy: { priority: "desc" }
-    },
-    timezone_rules: {        // ← Changed from timezoneRules
-      select: {
-        id: true,
-        location_pattern: true,  // ← Changed from locationPattern
-        timezone: true,
-        priority: true
-      },
-      orderBy: { priority: "desc" }
-    },
-    display_rules: {         // ← Changed from displayRules
-      select: {
-        id: true,
-        primary_time_field: true,    // ← Changed from primaryTimeField
-        timezone_source: true,       // ← Changed from timezoneSource
-        route_format: true,          // ← Changed from routeFormat
-        custom_fields: true          // ← Changed from customFields
+      orderBy: {
+        name: "asc"
       }
-    }
-  },
-  orderBy: { name: "asc" }
-});
+    });
 
-    // Transform for frontend compatibility (keeping camelCase for frontend)
+    // Transform for frontend compatibility
     const transformedTypes = segmentTypes.map(type => ({
       id: type.id,
       name: type.name,
@@ -60,7 +68,7 @@ const segmentTypes = await prisma.segmentTypeConfig.findMany({
       display_config: type.displayConfig,
       created_at: type.createdAt,
       updated_at: type.updatedAt,
-      classificationRules: type.classification_rules.map(rule => ({  // Transform back to camelCase
+      classificationRules: type.classification_rules.map(rule => ({
         id: rule.id,
         name: rule.name,
         pattern: rule.pattern,
@@ -68,8 +76,8 @@ const segmentTypes = await prisma.segmentTypeConfig.findMany({
         priority: rule.priority,
         isActive: rule.isActive
       })),
-      timezoneRules: type.timezone_rules,  // Transform back to camelCase
-      displayRules: type.display_rules      // Transform back to camelCase
+      timezoneRules: type.timezone_rules,
+      displayRules: type.display_rules
     }));
 
     res.json(transformedTypes);
