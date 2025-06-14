@@ -228,34 +228,61 @@ function formatDate(dateString, segment = null, isArrival = false) {
 function inferTimezoneFromLocation(location) {
   if (!location) return null;
 
-  const locationTimezones = {
-    // PS Private Terminal Facilities (use facility timezone)
-    'ps atl': 'America/New_York',     // PS Atlanta → Eastern Time
-    'ps lax': 'America/Los_Angeles',  // PS Los Angeles → Pacific Time  
-    'ps jfk': 'America/New_York',     // PS JFK → Eastern Time
-    'ps ord': 'America/Chicago',      // PS Chicago → Central Time
+const locationTimezones = {
+  // PS Private Terminal Facilities (use facility timezone)
+  'ps atl': 'America/New_York',
+  'ps lax': 'America/Los_Angeles',  
+  'ps jfk': 'America/New_York',
+  'ps ord': 'America/Chicago',
 
-    // Regular locations
-    atlanta: 'America/New_York',
-    atl: 'America/New_York',
-    austin: 'America/Chicago',
-    aus: 'America/Chicago',
-    'austin, tx': 'America/Chicago',
-    'new york': 'America/New_York',
-    nyc: 'America/New_York',
-    'los angeles': 'America/Los_Angeles',
-    lax: 'America/Los_Angeles',
-    chicago: 'America/Chicago',
-    ord: 'America/Chicago',
-    denver: 'America/Denver',
-    den: 'America/Denver',
-    phoenix: 'America/Phoenix',
-    phx: 'America/Phoenix',
-    miami: 'America/New_York',
-    mia: 'America/New_York',
-    seattle: 'America/Los_Angeles',
-    sea: 'America/Los_Angeles',
-  };
+  // Regular US locations
+  atlanta: 'America/New_York',
+  atl: 'America/New_York',
+  austin: 'America/Chicago',
+  aus: 'America/Chicago',
+  'austin, tx': 'America/Chicago',
+  'new york': 'America/New_York',
+  nyc: 'America/New_York',
+  'los angeles': 'America/Los_Angeles',
+  lax: 'America/Los_Angeles',
+  chicago: 'America/Chicago',
+  ord: 'America/Chicago',
+  denver: 'America/Denver',
+  den: 'America/Denver',
+  phoenix: 'America/Phoenix',
+  phx: 'America/Phoenix',
+  miami: 'America/New_York',
+  mia: 'America/New_York',
+  seattle: 'America/Los_Angeles',
+  sea: 'America/Los_Angeles',
+
+  // ADD THESE EUROPEAN LOCATIONS:
+  madrid: 'Europe/Madrid',
+  mad: 'Europe/Madrid',
+  'madrid, spain': 'Europe/Madrid',
+  spain: 'Europe/Madrid',
+  barcelona: 'Europe/Madrid',
+  bcn: 'Europe/Madrid',
+  
+  london: 'Europe/London',
+  lhr: 'Europe/London',
+  lgw: 'Europe/London',
+  
+  paris: 'Europe/Paris',
+  cdg: 'Europe/Paris',
+  
+  amsterdam: 'Europe/Amsterdam',
+  ams: 'Europe/Amsterdam',
+  
+  frankfurt: 'Europe/Berlin',
+  fra: 'Europe/Berlin',
+  
+  rome: 'Europe/Rome',
+  fco: 'Europe/Rome',
+  
+  lisbon: 'Europe/Lisbon',
+  lis: 'Europe/Lisbon'
+};
 
   const normalizedLocation = location.toLowerCase().trim();
 
