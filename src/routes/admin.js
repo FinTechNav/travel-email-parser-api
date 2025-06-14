@@ -398,7 +398,7 @@ router.post('/reprocess-segments', async (req, res) => {
     }
 
     // Find segments to reprocess
-    const segments = await prisma.travelSegment.findMany({
+    const segments = await prisma.Segment.findMany({
       where: whereClause,
       include: { email: true }
     });
@@ -408,7 +408,7 @@ router.post('/reprocess-segments', async (req, res) => {
     for (const segment of segments) {
       try {
         // Mark as reprocessed - actual reprocessing would use email processor
-        const updated = await prisma.travelSegment.update({
+        const updated = await prisma.Segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -444,7 +444,7 @@ router.post('/reprocess-segments', async (req, res) => {
 router.post('/quick-fixes/ps-timezone', async (req, res) => {
   try {
     // Fix PS timezone issues specifically
-    const psSegments = await prisma.travelSegment.findMany({
+    const psSegments = await prisma.Segment.findMany({
       where: { type: 'private_terminal' }
     });
 
@@ -464,7 +464,7 @@ router.post('/quick-fixes/ps-timezone', async (req, res) => {
         }
 
         // Update times with correct timezone
-        const updated = await prisma.travelSegment.update({
+        const updated = await prisma.Segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -765,21 +765,21 @@ router.get('/system-status', async (req, res) => {
 
     try {
       // Count segments
-      totalSegments = await prisma.travelSegment.count();
+      totalSegments = await prisma.Segment.count();
       
       // Count users
       totalUsers = await prisma.user.count();
       
       // Count segment types
-      segmentTypes = await prisma.segmentTypeConfig.count();
+      const segmentTypesResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM segment_type_configs`;
+segmentTypes = parseInt(segmentTypesResult[0].count);
       
       // Count classification rules
-      classificationRules = await prisma.classificationRule.count({
-        where: { isActive: true }
-      });
+const rulesResult = await prisma.$queryRaw`SELECT COUNT(*) as count FROM classification_rules WHERE is_active = true`;
+classificationRules = parseInt(rulesResult[0].count);
       
       // Check for PS timezone issues
-      const psSegments = await prisma.travelSegment.findMany({
+      const psSegments = await prisma.Segment.findMany({
         where: { type: 'private_terminal' },
         take: 5
       });
@@ -827,7 +827,7 @@ router.get('/system-status', async (req, res) => {
 router.post('/reprocess-segments', async (req, res) => {
   try {
     // Get all segments that need reprocessing
-    const segments = await prisma.travelSegment.findMany({
+    const segments = await prisma.Segment.findMany({
       take: 100, // Limit to prevent overwhelming the system
       orderBy: { createdAt: 'desc' }
     });
@@ -839,7 +839,7 @@ router.post('/reprocess-segments', async (req, res) => {
     for (const segment of segments) {
       try {
         // Mark for reprocessing by updating a flag
-        await prisma.travelSegment.update({
+        await prisma.Segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -879,7 +879,7 @@ router.post('/reprocess-segments', async (req, res) => {
 router.post('/fix-ps-timezone', async (req, res) => {
   try {
     // Find all PS segments
-    const psSegments = await prisma.travelSegment.findMany({
+    const psSegments = await prisma.Segment.findMany({
       where: { type: 'private_terminal' }
     });
 
@@ -908,7 +908,7 @@ router.post('/fix-ps-timezone', async (req, res) => {
         }
 
         // Update segment with corrected timezone
-        const updated = await prisma.travelSegment.update({
+        const updated = await prisma.Segment.update({
           where: { id: segment.id },
           data: {
             details: {
