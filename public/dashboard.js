@@ -19,7 +19,7 @@ function loadConfig() {
   const saved = JSON.parse(localStorage.getItem('emailParserConfig') || '{}');
 
   if (saved.environment) {
-    document.getElementById('environment').value = saved.environment;
+    document.getElementById('envSelect').value = saved.environment;
     apiConfig.environment = saved.environment;
   }
 
@@ -51,7 +51,7 @@ function saveConfig() {
 
 // Update API URL based on environment selection
 function updateApiUrl() {
-  const environment = document.getElementById('environment').value;
+  const environment = document.getElementById('envSelect').value;
   const customUrlGroup = document.getElementById('customUrlGroup');
   const currentUrlSpan = document.getElementById('currentUrl');
 
@@ -608,7 +608,7 @@ async function deleteSegment(segmentId) {
 // In public/dashboard.js - Update the DOMContentLoaded section
 document.addEventListener('DOMContentLoaded', function () {
   // Handle environment change
-  document.getElementById('environment').addEventListener('change', function () {
+  document.getElementById('envSelect').addEventListener('change', function () {
     updateApiUrl();
     refreshUsers(); // Reload users when environment changes
   });
