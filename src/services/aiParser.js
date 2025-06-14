@@ -215,6 +215,7 @@ console.log('🔍 OPENAI RESPONSE - exists:', !!response);
 console.log('🔍 OPENAI RESPONSE - choices:', response.choices?.length || 0);
 console.log('🔍 OPENAI RESPONSE - content exists:', !!response.choices?.[0]?.message?.content);
 console.log('🔍 OPENAI RESPONSE - raw content:', response.choices?.[0]?.message?.content || 'NO_CONTENT');
+
 const content = response.choices[0].message.content?.trim() || 'NO_CONTENT';
 logger.info('🔍 AI RESPONSE - Length:', content.length);
 logger.info('🔍 AI RESPONSE - First 500 chars:', content.substring(0, 500));

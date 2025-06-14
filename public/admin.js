@@ -519,25 +519,30 @@ function displayClassificationRules(rules) {
 }
 
 // =====================================================================
-// PROMPTS MANAGEMENT
+// AI PROMPTS MANAGEMENT 
 // =====================================================================
+
 
 async function loadPrompts() {
   const container = document.getElementById('promptsContainer');
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading AI prompts...</div>';
 
   try {
-    const response = await fetch('/api/admin/prompts');
+    const response = await fetch('/api/v1/admin/prompts');
     if (response.ok) {
       const prompts = await response.json();
       displayPrompts(prompts);
     } else {
-      throw new Error('Failed to load prompts');
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
   } catch (error) {
+    console.error('Failed to load prompts:', error);
     container.innerHTML = `
       <div class="alert alert-danger">
-        ❌ Could not load AI prompts. Admin system may not be set up yet.
+        <strong>❌ Failed to load AI prompts</strong>
+        <p>Error: ${error.message}</p>
+        <p>Please ensure the admin API endpoints are properly configured.</p>
+        <button class="btn-admin" onclick="loadPrompts()">Retry</button>
       </div>
     `;
   }
@@ -547,48 +552,643 @@ function displayPrompts(prompts) {
   const container = document.getElementById('promptsContainer');
   
   if (prompts.length === 0) {
-    container.innerHTML = '<div style="padding: 20px; text-align: center; color: #6c757d;">No AI prompts configured</div>';
+    container.innerHTML = `
+      <div style="padding: 40px; text-align: center;">
+        <h4 style="color: #6c757d; margin-bottom: 15px;">No AI prompts configured</h4>
+        <p style="color: #6c757d; margin-bottom: 20px;">Start by creating your first AI parsing prompt for travel emails.</p>
+        <button class="btn-admin" data-action="show-modal" data-modal="createPromptModal">
+          Create First Prompt
+        </button>
+      </div>
+    `;
     return;
   }
 
-  const tableHTML = `
-    <table class="admin-table">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Type</th>
-          <th>Version</th>
-          <th>Status</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${prompts.map(prompt => `
-          <tr>
-            <td><code>${prompt.name}</code></td>
-            <td>${prompt.category}</td>
-            <td>${prompt.type}</td>
-            <td>v${prompt.version}</td>
-            <td>
-              <span class="status-badge ${prompt.isActive ? 'status-active' : 'status-inactive'}">
-                ${prompt.isActive ? 'Active' : 'Inactive'}
-              </span>
-            </td>
-            <td>
-              <button class="btn-admin btn-small" data-action="edit-prompt" data-id="${prompt.id}">Edit</button>
-              <button class="btn-admin btn-small secondary" data-action="toggle-prompt" data-id="${prompt.id}" data-active="${!prompt.isActive}">
-                ${prompt.isActive ? 'Deactivate' : 'Activate'}
-              </button>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
+  // Group prompts by category for better organization
+  const promptsByCategory = prompts.reduce((acc, prompt) => {
+    if (!acc[prompt.category]) acc[prompt.category] = [];
+    acc[prompt.category].push(prompt);
+    return acc;
+  }, {});
+
+  let tableHTML = `
+    <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h3 style="margin: 0;">AI Parsing Prompts (${prompts.length})</h3>
+        <p style="margin: 5px 0 0 0; color: #6c757d;">Manage AI prompts for email parsing and classification</p>
+      </div>
+      <button class="btn-admin" data-action="show-modal" data-modal="createPromptModal">
+        <strong>+</strong> New Prompt
+      </button>
+    </div>
   `;
+
+  // Create tabbed interface for different categories
+  const categories = Object.keys(promptsByCategory).sort();
+  if (categories.length > 1) {
+    tableHTML += `
+      <div class="tab-navigation" style="margin-bottom: 20px;">
+        ${categories.map((category, index) => `
+          <button class="tab-button ${index === 0 ? 'active' : ''}" 
+                  data-category="${category}" 
+                  onclick="switchPromptCategory('${category}')">
+            ${category.charAt(0).toUpperCase() + category.slice(1)} 
+            (${promptsByCategory[category].length})
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Create tables for each category
+  categories.forEach((category, index) => {
+    const isVisible = index === 0 ? '' : 'style="display: none;"';
+    tableHTML += `
+      <div class="prompt-category-section" data-category="${category}" ${isVisible}>
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Version</th>
+              <th>Status</th>
+              <th>Usage</th>
+              <th>Success Rate</th>
+              <th>Last Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${promptsByCategory[category].map(prompt => `
+              <tr class="prompt-row" data-prompt-id="${prompt.id}">
+                <td>
+                  <div>
+                    <code style="font-weight: bold;">${prompt.name}</code>
+                    ${prompt.testGroup ? `<span class="badge badge-info">Test: ${prompt.testGroup}</span>` : ''}
+                  </div>
+                </td>
+                <td>
+                  <span class="type-badge type-${prompt.type}">${prompt.type}</span>
+                </td>
+                <td>v${prompt.version}</td>
+                <td>
+                  <span class="status-badge ${prompt.isActive ? 'status-active' : 'status-inactive'}">
+                    ${prompt.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td>${prompt.usageCount || 0} uses</td>
+                <td>
+                  ${prompt.successRate !== null ? 
+                    `<span class="success-rate ${getSuccessRateClass(prompt.successRate)}">${(prompt.successRate * 100).toFixed(1)}%</span>` : 
+                    '<span style="color: #6c757d;">No data</span>'
+                  }
+                </td>
+                <td>${formatDate(prompt.updatedAt)}</td>
+                <td class="actions-cell">
+                  <div class="action-buttons">
+                    <button class="btn-admin btn-small" 
+                            data-action="edit-prompt" 
+                            data-id="${prompt.id}"
+                            title="Edit Prompt">
+                      ✏️ Edit
+                    </button>
+                    <button class="btn-admin btn-small ${prompt.isActive ? 'secondary' : 'primary'}" 
+                            data-action="toggle-prompt" 
+                            data-id="${prompt.id}" 
+                            data-active="${!prompt.isActive}"
+                            title="${prompt.isActive ? 'Deactivate' : 'Activate'} Prompt">
+                      ${prompt.isActive ? '⏸️ Deactivate' : '▶️ Activate'}
+                    </button>
+                    <button class="btn-admin btn-small secondary" 
+                            data-action="duplicate-prompt" 
+                            data-id="${prompt.id}"
+                            title="Duplicate Prompt">
+                      📋 Duplicate
+                    </button>
+                    <button class="btn-admin btn-small danger" 
+                            data-action="delete-prompt" 
+                            data-id="${prompt.id}"
+                            title="Delete Prompt">
+                      🗑️ Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  });
   
   container.innerHTML = tableHTML;
-  setupTableActionListeners();
+  setupPromptActionListeners();
+}
+
+// Helper functions for display
+function getSuccessRateClass(rate) {
+  if (rate >= 0.9) return 'success-high';
+  if (rate >= 0.7) return 'success-medium';
+  return 'success-low';
+}
+
+function formatDate(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function switchPromptCategory(category) {
+  // Hide all category sections
+  document.querySelectorAll('.prompt-category-section').forEach(section => {
+    section.style.display = 'none';
+  });
+  
+  // Show selected category
+  const targetSection = document.querySelector(`[data-category="${category}"]`);
+  if (targetSection) {
+    targetSection.style.display = 'block';
+  }
+  
+  // Update tab buttons
+  document.querySelectorAll('.tab-button').forEach(button => {
+    button.classList.remove('active');
+  });
+  document.querySelector(`[data-category="${category}"]`).classList.add('active');
+}
+
+// =====================================================================
+// PROMPT CRUD OPERATIONS
+// =====================================================================
+
+function setupPromptActionListeners() {
+  // Edit prompt button
+  document.querySelectorAll('[data-action="edit-prompt"]').forEach(button => {
+    button.addEventListener('click', async (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      await editPrompt(promptId);
+    });
+  });
+
+  // Toggle prompt active status
+  document.querySelectorAll('[data-action="toggle-prompt"]').forEach(button => {
+    button.addEventListener('click', async (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      const newActiveState = e.target.getAttribute('data-active') === 'true';
+      await togglePromptStatus(promptId, newActiveState);
+    });
+  });
+
+  // Duplicate prompt
+  document.querySelectorAll('[data-action="duplicate-prompt"]').forEach(button => {
+    button.addEventListener('click', async (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      await duplicatePrompt(promptId);
+    });
+  });
+
+  // Delete prompt
+  document.querySelectorAll('[data-action="delete-prompt"]').forEach(button => {
+    button.addEventListener('click', async (e) => {
+      const promptId = e.target.getAttribute('data-id');
+      await deletePrompt(promptId);
+    });
+  });
+}
+
+async function editPrompt(promptId) {
+  try {
+    // Fetch current prompt data
+    const response = await fetch(`/api/v1/admin/prompts/${promptId}`);
+    if (!response.ok) throw new Error('Failed to fetch prompt data');
+    
+    const prompt = await response.json();
+    
+    // Populate edit modal with current data
+    populatePromptEditModal(prompt);
+    showModal('editPromptModal');
+    
+  } catch (error) {
+    console.error('Error loading prompt for editing:', error);
+    showAlert('danger', 'Failed to load prompt data for editing');
+  }
+}
+
+async function togglePromptStatus(promptId, newActiveState) {
+  try {
+    const response = await fetch(`/api/v1/admin/prompts/${promptId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: newActiveState })
+    });
+
+    if (response.ok) {
+      showAlert('success', `Prompt ${newActiveState ? 'activated' : 'deactivated'} successfully`);
+      loadPrompts(); // Refresh the list
+    } else {
+      throw new Error('Failed to update prompt status');
+    }
+  } catch (error) {
+    console.error('Error toggling prompt status:', error);
+    showAlert('danger', 'Failed to update prompt status');
+  }
+}
+
+async function duplicatePrompt(promptId) {
+  try {
+    const response = await fetch(`/api/v1/admin/prompts/${promptId}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (response.ok) {
+      showAlert('success', 'Prompt duplicated successfully');
+      loadPrompts(); // Refresh the list
+    } else {
+      throw new Error('Failed to duplicate prompt');
+    }
+  } catch (error) {
+    console.error('Error duplicating prompt:', error);
+    showAlert('danger', 'Failed to duplicate prompt');
+  }
+}
+
+async function deletePrompt(promptId) {
+  if (!confirm('Are you sure you want to delete this prompt? This action cannot be undone.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/v1/admin/prompts/${promptId}`, {
+      method: 'DELETE'
+    });
+
+    if (response.ok) {
+      showAlert('success', 'Prompt deleted successfully');
+      loadPrompts(); // Refresh the list
+    } else {
+      throw new Error('Failed to delete prompt');
+    }
+  } catch (error) {
+    console.error('Error deleting prompt:', error);
+    showAlert('danger', 'Failed to delete prompt');
+  }
+}
+
+// =====================================================================
+// ENHANCED PROMPT MODALS
+// =====================================================================
+
+function createPromptModals() {
+  return `
+    <!-- Create Prompt Modal -->
+    <div id="createPromptModal" class="modal" style="display: none;">
+      <div class="modal-backdrop" data-action="hide-modal" data-modal="createPromptModal"></div>
+      <div class="modal-content large-modal">
+        <div class="modal-header">
+          <h3>Create New AI Prompt</h3>
+          <button class="modal-close" data-action="hide-modal" data-modal="createPromptModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="createPromptForm">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="promptName">Prompt Name *</label>
+                <input type="text" id="promptName" name="name" required 
+                       placeholder="e.g., email_parsing_flight"
+                       pattern="[a-zA-Z0-9_]+"
+                       title="Only letters, numbers, and underscores allowed">
+                <small>Use snake_case naming (letters, numbers, underscores only)</small>
+              </div>
+              <div class="form-group">
+                <label for="promptCategory">Category *</label>
+                <select id="promptCategory" name="category" required>
+                  <option value="">Select category...</option>
+                  <option value="parsing">Email Parsing</option>
+                  <option value="classification">Email Classification</option>
+                  <option value="enhancement">Data Enhancement</option>
+                  <option value="validation">Data Validation</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="promptType">Segment Type *</label>
+                <select id="promptType" name="type" required>
+                  <option value="">Select type...</option>
+                  <option value="flight">Flight</option>
+                  <option value="hotel">Hotel</option>
+                  <option value="car">Car Rental</option>
+                  <option value="private_terminal">Private Terminal</option>
+                  <option value="rideshare">Rideshare</option>
+                  <option value="general">General</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="promptVersion">Version</label>
+                <input type="number" id="promptVersion" name="version" value="1" min="1">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="promptTestGroup">Test Group (Optional)</label>
+              <input type="text" id="promptTestGroup" name="testGroup" 
+                     placeholder="e.g., A, B, experimental">
+              <small>Used for A/B testing different prompt versions</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="promptText">Prompt Text *</label>
+              <textarea id="promptText" name="prompt" required rows="15" 
+                        placeholder="Enter your AI prompt here. You can use variables like {{emailContent}}, {{extractedTimes}}, etc."></textarea>
+              <small>
+                <strong>Available variables:</strong> {{emailContent}}, {{extractedTimes}}, {{senderEmail}}, {{subject}}
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" name="isActive" checked> 
+                Set as active prompt
+              </label>
+              <small>Active prompts are used for processing. Only one version per name can be active.</small>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" data-action="hide-modal" data-modal="createPromptModal" class="btn-admin secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-admin primary">
+                Create Prompt
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Prompt Modal -->
+    <div id="editPromptModal" class="modal" style="display: none;">
+      <div class="modal-backdrop" data-action="hide-modal" data-modal="editPromptModal"></div>
+      <div class="modal-content large-modal">
+        <div class="modal-header">
+          <h3>Edit AI Prompt</h3>
+          <button class="modal-close" data-action="hide-modal" data-modal="editPromptModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editPromptForm">
+            <input type="hidden" id="editPromptId" name="id">
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="editPromptName">Prompt Name</label>
+                <input type="text" id="editPromptName" name="name" readonly>
+                <small>Name cannot be changed. Create a new prompt if needed.</small>
+              </div>
+              <div class="form-group">
+                <label for="editPromptVersion">Version</label>
+                <input type="number" id="editPromptVersion" name="version" min="1">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="editPromptTestGroup">Test Group</label>
+              <input type="text" id="editPromptTestGroup" name="testGroup">
+            </div>
+            
+            <div class="form-group">
+              <label for="editPromptText">Prompt Text *</label>
+              <textarea id="editPromptText" name="prompt" required rows="15"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="editPromptActive" name="isActive"> 
+                Set as active prompt
+              </label>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" data-action="hide-modal" data-modal="editPromptModal" class="btn-admin secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-admin primary">
+                Update Prompt
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function populatePromptEditModal(prompt) {
+  document.getElementById('editPromptId').value = prompt.id;
+  document.getElementById('editPromptName').value = prompt.name;
+  document.getElementById('editPromptVersion').value = prompt.version;
+  document.getElementById('editPromptTestGroup').value = prompt.testGroup || '';
+  document.getElementById('editPromptText').value = prompt.prompt;
+  document.getElementById('editPromptActive').checked = prompt.isActive;
+}
+
+// =====================================================================
+// FORM SUBMISSION HANDLERS
+// =====================================================================
+
+function setupPromptFormHandlers() {
+  // Create Prompt Form Handler
+  const createPromptForm = document.getElementById('createPromptForm');
+  if (createPromptForm) {
+    createPromptForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      const data = {
+        name: formData.get('name'),
+        category: formData.get('category'),
+        type: formData.get('type'),
+        version: parseInt(formData.get('version')) || 1,
+        prompt: formData.get('prompt'),
+        testGroup: formData.get('testGroup') || null,
+        isActive: formData.get('isActive') === 'on'
+      };
+
+      try {
+        const response = await fetch('/api/v1/admin/prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          hideModal('createPromptModal');
+          e.target.reset();
+          showAlert('success', 'AI prompt created successfully');
+          loadPrompts();
+        } else {
+          const error = await response.json();
+          showAlert('danger', error.error || 'Failed to create prompt');
+        }
+      } catch (error) {
+        console.error('Error creating prompt:', error);
+        showAlert('danger', 'Failed to create prompt - check console for details');
+      }
+    });
+  }
+
+  // Edit Prompt Form Handler
+  const editPromptForm = document.getElementById('editPromptForm');
+  if (editPromptForm) {
+    editPromptForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const formData = new FormData(e.target);
+      const promptId = formData.get('id');
+      const data = {
+        version: parseInt(formData.get('version')),
+        prompt: formData.get('prompt'),
+        testGroup: formData.get('testGroup') || null,
+        isActive: formData.get('isActive') === 'on'
+      };
+
+      try {
+        const response = await fetch(`/api/v1/admin/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+          hideModal('editPromptModal');
+          showAlert('success', 'AI prompt updated successfully');
+          loadPrompts();
+        } else {
+          const error = await response.json();
+          showAlert('danger', error.error || 'Failed to update prompt');
+        }
+      } catch (error) {
+        console.error('Error updating prompt:', error);
+        showAlert('danger', 'Failed to update prompt - check console for details');
+      }
+    });
+  }
+}
+
+// =====================================================================
+// ADDITIONAL CSS STYLES FOR PROMPTS
+// =====================================================================
+
+function addPromptStyles() {
+  const styles = `
+    <style>
+      /* Prompt-specific styles */
+      .large-modal .modal-content {
+        width: 90%;
+        max-width: 900px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .form-row {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+
+      .form-row .form-group {
+        flex: 1;
+      }
+
+      .type-badge {
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+
+      .type-flight { background: #e3f2fd; color: #1976d2; }
+      .type-hotel { background: #f3e5f5; color: #7b1fa2; }
+      .type-car { background: #e8f5e8; color: #388e3c; }
+      .type-private_terminal { background: #fff3e0; color: #f57c00; }
+      .type-general { background: #f5f5f5; color: #616161; }
+
+      .success-rate {
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+      }
+
+      .success-high { background: #c8e6c9; color: #2e7d32; }
+      .success-medium { background: #fff3c4; color: #f57f17; }
+      .success-low { background: #ffcdd2; color: #c62828; }
+
+      .badge {
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: bold;
+        margin-left: 8px;
+      }
+
+      .badge-info { background: #e1f5fe; color: #0277bd; }
+
+      .tab-navigation {
+        display: flex;
+        border-bottom: 2px solid #e0e0e0;
+      }
+
+      .tab-button {
+        padding: 10px 20px;
+        border: none;
+        background: none;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        font-weight: 500;
+      }
+
+      .tab-button.active {
+        border-bottom-color: #007bff;
+        color: #007bff;
+      }
+
+      .actions-cell {
+        white-space: nowrap;
+      }
+
+      .action-buttons {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+      }
+
+      .btn-small {
+        padding: 4px 8px;
+        font-size: 12px;
+        min-width: auto;
+      }
+
+      .prompt-row:hover {
+        background-color: #f8f9fa;
+      }
+
+      textarea[name="prompt"] {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+    </style>
+  `;
+  
+  document.head.insertAdjacentHTML('beforeend', styles);
 }
 
 // =====================================================================
