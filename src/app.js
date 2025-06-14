@@ -23,9 +23,6 @@ const requestLogger = require('./middleware/requestLogger');
 const app = express();
 
 const promptRoutes = require('./routes/prompts');
-app.use('/api/v1/prompts', promptRoutes);
-
-app.use('/api/v1/admin', adminRoutes);
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
@@ -92,6 +89,8 @@ app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/parse', parseRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/prompts', promptRoutes);
+app.use('/api/v1/admin', adminRoutes);
 app.use('/docs', docsRoutes);
 
 // Root endpoint

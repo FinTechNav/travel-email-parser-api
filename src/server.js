@@ -3,8 +3,6 @@ require('dotenv').config();
 const app = require('./app');
 const logger = require('./utils/logger');
 const { PrismaClient } = require('@prisma/client');
-const adminRoutes = require('./routes/admin');
-app.use('/api/admin', adminRoutes);
 
 // Import email services
 const EmailProcessor = require('./services/emailProcessor');

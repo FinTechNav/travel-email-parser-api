@@ -156,7 +156,7 @@ function setupFormEventListeners() {
       };
 
       try {
-        const response = await fetch('/api/admin/segment-types', {
+        const response = await fetch('/api/v1/admin/segment-types', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -194,7 +194,7 @@ function setupFormEventListeners() {
       };
 
       try {
-        const response = await fetch('/api/admin/classification-rules', {
+        const response = await fetch('/api/v1/admin/classification-rules', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data)
@@ -366,7 +366,7 @@ async function loadSegmentTypes() {
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading segment types...</div>';
 
   try {
-    const response = await fetch('/api/admin/segment-types');
+    const response = await fetch('/api/v1/admin/segment-types');
     if (response.ok) {
       const segmentTypes = await response.json();
       displaySegmentTypes(segmentTypes);
@@ -444,7 +444,7 @@ async function loadClassificationRules() {
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading classification rules...</div>';
 
   try {
-    const response = await fetch('/api/admin/segment-types');
+    const response = await fetch('/api/v1/admin/segment-types');
     if (response.ok) {
       const segmentTypes = await response.json();
       const allRules = segmentTypes.flatMap(type => 
