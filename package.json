@@ -46,6 +46,7 @@
     "mailparser": "^3.7.3",
     "morgan": "^1.10.0",
     "openai": "^4.20.1",
+    "papaparse": "^5.5.3",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

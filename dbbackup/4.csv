@@ -1,0 +1,7 @@
+id,name,sender_pattern,email_type,trust_level,is_active,metadata,created_at,updated_at
+cmbuwtrfl000qxfjf008wb9l3,delta_airlines,@delta.com,flight,trusted,true,"{""airline"":""Delta Air Lines"",""priority"":""high"",""auto_process"":true}",2025-06-13 14:35:37.378,2025-06-13 14:35:37.378
+cmbuwtrj9000rxfjfybnq628s,alamo_car_rental,@alamo.com,car_rental,trusted,true,"{""company"":""Alamo Rent A Car"",""priority"":""high"",""auto_process"":true}",2025-06-13 14:35:37.509,2025-06-13 14:35:37.509
+cmbuwtrmx000sxfjfsorx2smq,booking_hotels,@booking.com,hotel,trusted,true,"{""company"":""Booking.com"",""priority"":""high"",""auto_process"":true}",2025-06-13 14:35:37.642,2025-06-13 14:35:37.642
+cmbuwtrqk000txfjfbczw77at,expedia_general,@expedia.com,null,trusted,true,"{""company"":""Expedia"",""priority"":""high"",""auto_process"":true}",2025-06-13 14:35:37.772,2025-06-13 14:35:37.772
+cmbv2hnx90009x47ta95rnsgn,ps_reservations_official,@reserveps.com,private_terminal,trusted,true,"{""description"":""Official PS Reservations email domain"",""processingPreferences"":{""autoClassify"":true,""skipSpamCheck"":true,""priorityProcessing"":true}}",2025-06-13 17:14:10.653,2025-06-13 17:14:10.653
+cmbv2ho5i000ax47to4o49lek,ps_member_services,memberservices@reserveps.com,private_terminal,trusted,true,"{""description"":""PS member services specific address"",""processingPreferences"":{""autoClassify"":true,""skipSpamCheck"":true,""priorityProcessing"":true}}",2025-06-13 17:14:10.95,2025-06-13 17:14:10.95

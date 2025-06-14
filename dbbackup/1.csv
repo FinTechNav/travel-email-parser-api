@@ -1,0 +1,204 @@
+id,name,category,type,version,prompt,variables,is_active,metadata,created_at,updated_at,created_by,test_group,success_rate,usage_count,segment_type_name
+cmbubzuad0001xf7vmw32pf3h,email_parsing_base,parsing,base,1,"You are an expert travel email parser. Extract ALL relevant information from this confirmation email.  
+You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+
+CRITICAL TIME PARSING RULES:
+- Convert ALL times to 24-hour format (HH:MM)
+- Examples: 4:00 PM → 16:00, 11:00 AM → 11:00, 2:00 PM → 14:00
+- Look for exact phrases: ""pickup at"", ""check-in"", ""check-out"", ""departure"", ""arrival""
+- Pay close attention to AM/PM indicators
+- If time seems wrong, double-check the original email text
+- Common hotel times: check-in 15:00-16:00, check-out 10:00-11:00
+- Common car rental: pickup/return during business hours 08:00-18:00
+
+EXTRACTED TIMES FROM EMAIL:
+{{extractedTimes}}
+
+IMPORTANT RULES:
+1. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+2. Identify confirmation/booking numbers (remove spaces, clean format)
+3. Extract passenger names exactly as shown
+4. Parse prices and currency (numbers only for amount)
+5. Identify locations (cities, airports, addresses)
+6. If information is missing, use null
+7. Always respond with valid JSON only
+8. Do not include any explanatory text outside the JSON
+
+Return a JSON object with this exact structure:
+{
+  ""type"": ""{{emailType}}"",
+  ""confirmation_number"": ""string or null"",
+  ""passenger_name"": ""string or null"",
+  ""travel_dates"": {
+    ""departure"": ""YYYY-MM-DD HH:MM or null"",
+    ""return"": ""YYYY-MM-DD HH:MM or null""
+  },
+  ""locations"": {
+    ""origin"": ""string or null"",
+    ""destination"": ""string or null""
+  },
+  ""price"": {
+    ""amount"": number or null,
+    ""currency"": ""string or null""
+  },
+  ""details"": {}
+}
+
+Email content:
+{{emailContent}}",null,true,null,2025-06-13 04:52:29.077,2025-06-13 04:52:29.077,null,null,null,0,null
+cmbubzuhy0003xf7v7qz1xv9u,email_parsing_hotel,parsing,hotel,1,"For hotels, also extract in the details object:
+{
+  ""hotel_name"": ""hotel name"",
+  ""hotel_address"": ""full address"",
+  ""room_type"": ""room type"",
+  ""number_of_guests"": number,
+  ""check_in_time"": ""HH:MM (24-hour format)"",
+  ""check_out_time"": ""HH:MM (24-hour format)"",
+  ""cancellation_policy"": ""policy details"",
+  ""amenities"": [""wifi"", ""breakfast"", etc],
+  ""loyalty_number"": ""loyalty program number""
+}
+IMPORTANT: check_in_time and check_out_time must be in 24-hour format!",null,true,null,2025-06-13 04:52:29.351,2025-06-13 17:32:37.69,null,null,null,10,null
+cmbubzulq0004xf7vrp66zb6f,email_parsing_car_rental,parsing,car_rental,1,"For car rentals, also extract in the details object:
+{
+  ""rental_company"": ""company name"",
+  ""car_type"": ""car category/model"",
+  ""pickup_location"": ""pickup address"",
+  ""return_location"": ""return address"",
+  ""pickup_time"": ""HH:MM (24-hour format)"",
+  ""return_time"": ""HH:MM (24-hour format)"",
+  ""driver_name"": ""primary driver"",
+  ""fuel_policy"": ""fuel policy"",
+  ""insurance"": ""insurance details""
+}
+IMPORTANT: pickup_time and return_time must be in 24-hour format!",null,true,null,2025-06-13 04:52:29.486,2025-06-13 20:32:46.958,null,null,null,12,null
+cmbubzu6k0000xf7v5rq50f9z,email_classification_base,classification,base,1,"Classify this email as one of: flight, hotel, car_rental, train, cruise, restaurant, event, other
+
+Look for keywords like:
+- Flight: airline, flight, boarding, gate, departure, arrival
+- Hotel: hotel, reservation, check-in, check-out, room
+- Car rental: rental, car, pickup, return, vehicle
+- Train: train, rail, platform, coach, seat
+- Cruise: cruise, ship, cabin, sailing
+- Restaurant: restaurant, reservation, table, dining
+- Event: ticket, event, concert, show, venue
+
+Email content: {{emailContent}}...
+
+Respond with only the classification word.",null,true,null,2025-06-13 04:52:28.941,2025-06-13 20:34:01.987,null,null,null,47,null
+cmbubzue50002xf7vnwo0payz,email_parsing_flight,parsing,flight,1,"You are an expert flight email parser. Extract ALL flight information from this confirmation email.
+You MUST respond with valid JSON only. Do not include any explanatory text outside the JSON.
+
+{{timeParsingInstructions}}
+
+CRITICAL FLIGHT PARSING RULES:
+1. For ROUND-TRIP flights: Create TWO separate flight objects in the flights array (outbound + return)
+2. For ONE-WAY flights with connections: Create separate flight objects for each flight segment  
+3. For DIRECT ONE-WAY flights: Create ONE flight object in the flights array
+4. Each flight object must have DIFFERENT departure/arrival times
+5. Never create identical flight objects with the same times
+6. Look carefully for multiple flight numbers, departure times, arrival times
+7. Extract dates in ISO format (YYYY-MM-DD HH:MM)
+
+Return this EXACT JSON structure for flights:
+{
+  ""type"": ""flight"",
+  ""confirmation_number"": ""string or null"",
+  ""passenger_name"": ""string or null"", 
+  ""flights"": [
+    {
+      ""flight_number"": ""flight number like DL1234"",
+      ""departure_airport"": ""3-letter airport code"",
+      ""arrival_airport"": ""3-letter airport code"",
+      ""departure_city"": ""full city name"",
+      ""arrival_city"": ""full city name"", 
+      ""departure_datetime"": ""YYYY-MM-DD HH:MM"",
+      ""arrival_datetime"": ""YYYY-MM-DD HH:MM"",
+      ""aircraft"": ""aircraft type"",
+      ""seat"": ""seat number""
+    }
+  ],
+  ""price"": {
+    ""amount"": number or null,
+    ""currency"": ""string or null""
+  }
+}
+
+IMPORTANT: If this is a round-trip flight, you MUST create TWO objects in the flights array:
+- First object: outbound flight (e.g., ATL → AUS on June 13)
+- Second object: return flight (e.g., AUS → ATL on June 16)
+
+Each flight should have different departure_datetime and arrival_datetime values.
+
+Parse this flight confirmation email:
+{{emailContent}}",null,true,null,2025-06-13 04:52:29.214,2025-06-13 17:32:15.818,null,null,null,11,null
+cmbv2eto80000x46ouzmm168a,email_parsing_private_terminal,parsing,private_terminal,2,"You are an expert private terminal service email parser. Extract information about the PRIVATE TERMINAL BOOKING, not the flight details mentioned.
+
+CRITICAL: This email is for a PRIVATE TERMINAL SERVICE that provides premium airport access before a flight. Focus on the terminal service details, NOT the flight information.
+
+PS ARRIVAL WINDOW LOGIC:
+- PS allows arrival ""up to three hours before your departure""
+- Email states ""Plan to be at PS no later than [TIME]"" 
+- Calculate BOTH earliest and latest arrival times
+- Most travelers want to know the EARLIEST they can arrive to enjoy amenities
+
+TIMEZONE RULES FOR PRIVATE TERMINALS:
+- PS ATL (Atlanta) → Use Eastern Time (EDT/EST)
+- PS LAX (Los Angeles) → Use Pacific Time (PDT/PST)  
+- PS JFK (New York) → Use Eastern Time (EDT/EST)
+- Private terminal is ALWAYS in the same timezone as the departure airport
+
+IMPORTANT PARSING RULES:
+1. Extract the PS facility information (PS ATL, PS LAX, etc.)
+2. Find flight departure time
+3. Calculate earliest arrival (3 hours before flight)
+4. Find latest arrival (""Plan to be at PS no later than X"")
+5. Extract the experience type (The Salon, The Studio, etc.)
+6. The flight info is ASSOCIATED FLIGHT, not the main booking
+7. Convert times to 24-hour format and include date
+8. Use the format: YYYY-MM-DD HH:MM for all datetime fields
+
+Return this EXACT JSON structure:
+{
+  ""type"": ""private_terminal"",
+  ""confirmation_number"": ""PS reservation number (not flight confirmation)"",
+  ""passenger_name"": ""primary passenger name"",
+  ""travel_dates"": {
+    ""departure"": ""EARLIEST PS arrival time (YYYY-MM-DD HH:MM)"",
+    ""return"": ""LATEST PS arrival time (YYYY-MM-DD HH:MM)""
+  },
+  ""locations"": {
+    ""origin"": ""PS facility location (e.g., PS ATL)"",
+    ""destination"": ""destination city from flight""
+  },
+  ""service_details"": {
+    ""facility_name"": ""PS ATL, PS LAX, etc."",
+    ""experience_type"": ""The Salon, The Studio, etc."",
+    ""earliest_arrival"": ""earliest you can arrive at PS (YYYY-MM-DD HH:MM)"",
+    ""latest_arrival"": ""latest you should arrive at PS (YYYY-MM-DD HH:MM)"",
+    ""arrival_window"": ""time range for PS arrival (e.g., 11:30 AM - 1:00 PM EDT)"",
+    ""arrival_note"": ""Plan to arrive at PS no later than 1:00 PM EDT"",
+    ""service_type"": ""departure"",
+    ""departure_process"": ""description of premium departure process""
+  },
+  ""associated_flight"": {
+    ""flight_number"": ""airline flight this service connects to"",
+    ""airline"": ""airline name"",
+    ""departure_airport"": ""3-letter airport code"",
+    ""arrival_airport"": ""3-letter destination code"", 
+    ""departure_datetime"": ""flight departure time (YYYY-MM-DD HH:MM)"",
+    ""arrival_datetime"": ""flight arrival time (YYYY-MM-DD HH:MM)""
+  },
+  ""details"": {
+    ""facility_address"": ""physical address of PS facility"",
+    ""arrival_instructions"": ""how to arrive at facility"",
+    ""contact_info"": ""phone number or contact details""
+  },
+  ""price"": {
+    ""amount"": null,
+    ""currency"": null
+  }
+}
+
+Parse this private terminal service confirmation email:
+{{emailContent}}",null,true,null,2025-06-13 17:11:58.136,2025-06-13 20:34:16.301,null,null,null,14,null

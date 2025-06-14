@@ -1,0 +1,8 @@
+id,segment_type_name,location_pattern,timezone,priority,created_at
+1,private_terminal,PS ATL,America/New_York,20,2025-06-13 18:41:43.127703
+2,private_terminal,PS LAX,America/Los_Angeles,20,2025-06-13 18:41:43.127703
+3,private_terminal,PS JFK,America/New_York,20,2025-06-13 18:41:43.127703
+4,private_terminal,PS ORD,America/Chicago,20,2025-06-13 18:41:43.127703
+5,private_terminal,PS DFW,America/Chicago,20,2025-06-13 18:41:43.127703
+6,private_terminal,PS MIA,America/New_York,20,2025-06-13 18:41:43.127703
+7,private_terminal,PS SEA,America/Los_Angeles,20,2025-06-13 18:41:43.127703

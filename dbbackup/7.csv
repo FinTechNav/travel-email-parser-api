@@ -1,0 +1,10 @@
+id,name,display_name,description,is_active,default_timezone,display_config,created_at,updated_at
+1,flight,Flight,Commercial airline flights,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+2,hotel,Hotel,Hotel reservations and accommodations,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+3,car_rental,Car Rental,Vehicle rental services,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+4,train,Train,Rail transportation,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+5,cruise,Cruise,Cruise ship reservations,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+6,restaurant,Restaurant,Restaurant reservations,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+7,event,Event,Entertainment and event tickets,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+8,private_terminal,Private Terminal,Premium airport terminal services,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935
+9,other,Other,Miscellaneous travel services,true,America/New_York,{},2025-06-13 18:41:42.047935,2025-06-13 18:41:42.047935

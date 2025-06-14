@@ -1,0 +1,7 @@
+id,name,email_type,pattern,variations,is_active,created_at,updated_at
+cmbuwtqtn000kxfjfn0dprp0m,hotel_thompson_pattern,hotel,Reservation Details for Your Upcoming Stay at Thompson Austin,"[""Reservation Details for Your Upcoming Stay"",""Thompson Austin"",""Upcoming Stay at Thompson""]",true,2025-06-13 14:35:36.587,2025-06-13 14:35:36.587
+cmbuwtqxd000lxfjf7wbhpll1,flight_skymiles_pattern,flight,Congrats On Your SkyMiles Award Trip,"[""SkyMiles Award Trip"",""Congrats On Your"",""Award Trip""]",true,2025-06-13 14:35:36.721,2025-06-13 14:35:36.721
+cmbuwtr10000mxfjfr0l3x7l1,car_rental_alamo_pattern,car_rental,Alamo Reservation Confirmation,"[""Alamo Reservation"",""Reservation Confirmation"",""AUSTIN BERGSTROM ARPT""]",true,2025-06-13 14:35:36.853,2025-06-13 14:35:36.853
+cmbv2hooq000cx47tw0t93yj5,ps_upcoming_pattern,private_terminal,UPCOMING: PS,"[""UPCOMING: PS |"",""PS | Zita Dione Jensen"",""ATL to AUS"",""UPCOMING: PS | [Name] -""]",true,2025-06-13 17:14:11.642,2025-06-13 17:14:11.642
+cmbv2hox5000dx47tmhpuub67,ps_confirmation_pattern,private_terminal,PS Reservation Confirmation,"[""PS Reservation"",""Reservation Confirmation"",""PS Confirmation""]",true,2025-06-13 17:14:11.945,2025-06-13 17:14:11.945
+cmbv2hp5o000ex47tebsi84t7,ps_welcome_pattern,private_terminal,Welcome to PS,"[""We look forward to welcoming you to PS"",""Welcome to PS ATL"",""Welcome to PS LAX""]",true,2025-06-13 17:14:12.253,2025-06-13 17:14:12.253

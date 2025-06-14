@@ -1,0 +1,6 @@
+id,name,segment_type_name,pattern,type,priority,is_active,created_at,updated_at
+1,ps_sender_reserveps,private_terminal,@reserveps.com,sender,25,true,2025-06-13 18:41:42.600872,2025-06-13 18:41:42.600872
+2,ps_subject_upcoming_ps,private_terminal,UPCOMING: PS,subject,24,true,2025-06-13 18:41:42.600872,2025-06-13 18:41:42.600872
+3,ps_keyword_ps_reservations,private_terminal,PS reservations,keyword,23,true,2025-06-13 18:41:42.600872,2025-06-13 18:41:42.600872
+4,ps_keyword_the_salon,private_terminal,The Salon,keyword,22,true,2025-06-13 18:41:42.600872,2025-06-13 18:41:42.600872
+5,ps_keyword_plan_to_be_at_ps,private_terminal,Plan to be at PS,keyword,21,true,2025-06-13 18:41:42.600872,2025-06-13 18:41:42.600872

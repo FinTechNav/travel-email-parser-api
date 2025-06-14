@@ -1,0 +1,10 @@
+id,segment_type_name,primary_time_field,timezone_source,route_format,custom_fields,created_at
+1,private_terminal,departure,origin,{origin} → {destination},{},2025-06-13 18:41:43.647734
+2,flight,departure,origin,{origin} → {destination},{},2025-06-13 18:41:43.647734
+3,hotel,departure,destination,{destination},{},2025-06-13 18:41:43.647734
+4,car_rental,departure,origin,{origin},{},2025-06-13 18:41:43.647734
+12,train,departure,origin,{origin} → {destination},{},2025-06-13 19:35:14.280613
+13,cruise,departure,origin,{origin} → {destination},{},2025-06-13 19:35:14.280613
+14,restaurant,departure,destination,{destination},{},2025-06-13 19:35:14.280613
+15,event,departure,destination,{destination},{},2025-06-13 19:35:14.280613
+17,other,departure,origin,{origin} → {destination},{},2025-06-13 19:35:14.280613

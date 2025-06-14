@@ -1,0 +1,27 @@
+id,name,email_type,rule_type,pattern,priority,is_active,case_insensitive,metadata,created_at,updated_at,created_by
+cmbuwtosp0000xfjfi7leme5y,hotel_keyword_hotel,hotel,keyword,hotel,10,true,true,null,2025-06-13 14:35:33.961,2025-06-13 14:35:33.961,null
+cmbuwtowe0001xfjf2udp8w4z,hotel_keyword_reservation,hotel,keyword,reservation,9,true,true,null,2025-06-13 14:35:34.095,2025-06-13 14:35:34.095,null
+cmbuwtp010002xfjfia7e7bkp,hotel_keyword_checkin,hotel,keyword,check-in,8,true,true,null,2025-06-13 14:35:34.225,2025-06-13 14:35:34.225,null
+cmbuwtp3n0003xfjf2mdzmc86,hotel_keyword_thompson,hotel,keyword,thompson,15,true,true,null,2025-06-13 14:35:34.355,2025-06-13 14:35:34.355,null
+cmbuwtp7a0004xfjfjw0qg0q9,hotel_keyword_stay_at,hotel,keyword,stay at,7,true,true,null,2025-06-13 14:35:34.486,2025-06-13 14:35:34.486,null
+cmbuwtpax0005xfjfeux44hxb,flight_keyword_flight,flight,keyword,flight,10,true,true,null,2025-06-13 14:35:34.617,2025-06-13 14:35:34.617,null
+cmbuwtpek0006xfjft9dty5ok,flight_keyword_delta,flight,keyword,delta,12,true,true,null,2025-06-13 14:35:34.748,2025-06-13 14:35:34.748,null
+cmbuwtpi60007xfjf8hg8b6gq,flight_keyword_skymiles,flight,keyword,skymiles,15,true,true,null,2025-06-13 14:35:34.879,2025-06-13 14:35:34.879,null
+cmbuwtplt0008xfjf14ezid47,flight_keyword_boarding,flight,keyword,boarding,11,true,true,null,2025-06-13 14:35:35.01,2025-06-13 14:35:35.01,null
+cmbuwtpph0009xfjfhvr9xnts,flight_keyword_award_trip,flight,keyword,award trip,14,true,true,null,2025-06-13 14:35:35.141,2025-06-13 14:35:35.141,null
+cmbuwtpt3000axfjfhfizox2a,flight_subject_congrats,flight,subject_pattern,congrats on your,16,true,true,null,2025-06-13 14:35:35.272,2025-06-13 14:35:35.272,null
+cmbuwtpwq000bxfjflpy3l87u,car_rental_keyword_car,car_rental,keyword,car,8,true,true,null,2025-06-13 14:35:35.403,2025-06-13 14:35:35.403,null
+cmbuwtq0g000cxfjf2u5sufw4,car_rental_keyword_rental,car_rental,keyword,rental,10,true,true,null,2025-06-13 14:35:35.536,2025-06-13 14:35:35.536,null
+cmbuwtq43000dxfjf3ywcisrz,car_rental_keyword_alamo,car_rental,keyword,alamo,15,true,true,null,2025-06-13 14:35:35.667,2025-06-13 14:35:35.667,null
+cmbuwtq7p000exfjf38z5tpyy,car_rental_keyword_pickup,car_rental,keyword,pickup,9,true,true,null,2025-06-13 14:35:35.798,2025-06-13 14:35:35.798,null
+cmbuwtqbd000fxfjf3vgqsovw,train_keyword_train,train,keyword,train,10,true,true,null,2025-06-13 14:35:35.93,2025-06-13 14:35:35.93,null
+cmbuwtqf1000gxfjf09xu475h,train_keyword_rail,train,keyword,rail,9,true,true,null,2025-06-13 14:35:36.061,2025-06-13 14:35:36.061,null
+cmbuwtqio000hxfjftm9xvgxu,cruise_keyword_cruise,cruise,keyword,cruise,10,true,true,null,2025-06-13 14:35:36.192,2025-06-13 14:35:36.192,null
+cmbuwtqmb000ixfjfmnlqplm2,restaurant_keyword_restaurant,restaurant,keyword,restaurant,10,true,true,null,2025-06-13 14:35:36.323,2025-06-13 14:35:36.323,null
+cmbuwtqpz000jxfjfs8972bn8,restaurant_keyword_dining,restaurant,keyword,dining,8,true,true,null,2025-06-13 14:35:36.456,2025-06-13 14:35:36.456,null
+cmbv2hlv10000x47tbrha8zhk,ps_sender_reserveps,private_terminal,sender_domain,@reserveps.com,25,true,true,"{""trustLevel"":""high"",""description"":""PS Reservations official sender domain""}",2025-06-13 17:14:07.981,2025-06-13 17:14:07.981,null
+cmbv2hm5u0001x47tjuweabfg,ps_subject_upcoming_ps,private_terminal,subject_pattern,UPCOMING: PS,24,true,true,"{""description"":""PS booking confirmation subject pattern""}",2025-06-13 17:14:08.371,2025-06-13 17:14:08.371,null
+cmbv2hmed0002x47tgl99jxxt,ps_keyword_ps_reservations,private_terminal,keyword,PS Reservations,23,true,true,"{""description"":""PS company name in email content""}",2025-06-13 17:14:08.677,2025-06-13 17:14:08.677,null
+cmbv2hmmx0003x47ty7zj1ve3,ps_keyword_the_salon,private_terminal,keyword,The Salon,22,true,true,"{""description"":""PS premium experience service name""}",2025-06-13 17:14:08.986,2025-06-13 17:14:08.986,null
+cmbv2hmxp0004x47t5vi8szfh,ps_keyword_plan_to_be_at_ps,private_terminal,keyword,Plan to be at PS no later than,21,true,true,"{""description"":""PS arrival instruction pattern""}",2025-06-13 17:14:09.373,2025-06-13 17:14:09.373,null
+cmbv2hn5y0005x47t5qy07jik,ps_keyword_private_tsa,private_terminal,keyword,private TSA screening,20,true,true,"{""description"":""PS private security screening reference""}",2025-06-13 17:14:09.67,2025-06-13 17:14:09.67,null
