@@ -829,7 +829,7 @@ router.post('/reprocess-segments', async (req, res) => {
     // Get all segments that need reprocessing
     const segments = await prisma.Segment.findMany({
       take: 100, // Limit to prevent overwhelming the system
-      orderBy: { createdAt: 'desc' }
+      orderBy: { parsedAt: 'desc' }
     });
 
     const results = [];
