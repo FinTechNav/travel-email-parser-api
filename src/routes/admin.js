@@ -557,4 +557,467 @@ router.post('/test-classification', async (req, res) => {
   }
 });
 
+// =====================================================================
+// 1. CLASSIFICATION RULES CRUD ENDPOINTS
+// =====================================================================
+
+// PUT /api/v1/admin/classification-rules/:id - Update classification rule
+router.put('/classification-rules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pattern, type, priority, isActive } = req.body;
+
+    const rule = await prisma.classificationRule.update({
+      where: { id: parseInt(id) },
+      data: {
+        pattern,
+        type,
+        priority,
+        isActive,
+        updatedAt: new Date()
+      }
+    });
+
+    res.json({ 
+      message: 'Classification rule updated successfully',
+      rule
+    });
+  } catch (error) {
+    console.error('Error updating classification rule:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Classification rule not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update classification rule' });
+    }
+  }
+});
+
+// DELETE /api/v1/admin/classification-rules/:id - Delete classification rule
+router.delete('/classification-rules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.classificationRule.delete({
+      where: { id: parseInt(id) }
+    });
+
+    res.json({ message: 'Classification rule deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting classification rule:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Classification rule not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to delete classification rule' });
+    }
+  }
+});
+
+// POST /api/v1/admin/classification-rules - Create classification rule
+router.post('/classification-rules', async (req, res) => {
+  try {
+    const { ruleName, segmentType, pattern, ruleType = 'keyword', priority = 10, isActive = true } = req.body;
+
+    if (!ruleName || !segmentType || !pattern) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: ruleName, segmentType, pattern' 
+      });
+    }
+
+    const rule = await prisma.classificationRule.create({
+      data: {
+        name: ruleName,
+        segmentTypeName: segmentType,
+        pattern,
+        type: ruleType,
+        priority,
+        isActive
+      }
+    });
+
+    res.status(201).json({ 
+      message: 'Classification rule created successfully',
+      rule
+    });
+  } catch (error) {
+    console.error('Error creating classification rule:', error);
+    res.status(500).json({ error: 'Failed to create classification rule' });
+  }
+});
+
+// =====================================================================
+// 2. PROMPTS MANAGEMENT ENDPOINTS
+// =====================================================================
+
+// GET /api/v1/admin/prompts - Get all prompt templates
+router.get('/prompts', async (req, res) => {
+  try {
+    const prompts = await prisma.promptTemplate.findMany({
+      orderBy: [
+        { name: 'asc' },
+        { version: 'desc' }
+      ]
+    });
+
+    res.json(prompts);
+  } catch (error) {
+    console.error('Error fetching prompts:', error);
+    res.status(500).json({ error: 'Failed to fetch prompts' });
+  }
+});
+
+// POST /api/v1/admin/prompts - Create new prompt template
+router.post('/prompts', async (req, res) => {
+  try {
+    const { name, category, type, prompt, version = 1, isActive = true } = req.body;
+
+    if (!name || !category || !type || !prompt) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: name, category, type, prompt' 
+      });
+    }
+
+    // Deactivate other versions if this is being set as active
+    if (isActive) {
+      await prisma.promptTemplate.updateMany({
+        where: { name, isActive: true },
+        data: { isActive: false }
+      });
+    }
+
+    const promptTemplate = await prisma.promptTemplate.create({
+      data: {
+        name,
+        category,
+        type,
+        version,
+        isActive,
+        prompt
+      }
+    });
+
+    res.status(201).json({ 
+      message: 'Prompt template created successfully',
+      promptTemplate
+    });
+  } catch (error) {
+    console.error('Error creating prompt:', error);
+    res.status(500).json({ error: 'Failed to create prompt template' });
+  }
+});
+
+// PUT /api/v1/admin/prompts/:id - Update prompt template
+router.put('/prompts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prompt, isActive, version } = req.body;
+
+    // If setting this prompt as active, deactivate others with same name
+    if (isActive) {
+      const currentPrompt = await prisma.promptTemplate.findUnique({
+        where: { id: parseInt(id) }
+      });
+      
+      if (currentPrompt) {
+        await prisma.promptTemplate.updateMany({
+          where: { 
+            name: currentPrompt.name, 
+            isActive: true,
+            id: { not: parseInt(id) }
+          },
+          data: { isActive: false }
+        });
+      }
+    }
+
+    const updatedPrompt = await prisma.promptTemplate.update({
+      where: { id: parseInt(id) },
+      data: { prompt, isActive, version }
+    });
+
+    res.json({ 
+      message: 'Prompt template updated successfully',
+      promptTemplate: updatedPrompt
+    });
+  } catch (error) {
+    console.error('Error updating prompt:', error);
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Prompt template not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update prompt template' });
+    }
+  }
+});
+
+// =====================================================================
+// 3. SYSTEM STATUS ENDPOINT
+// =====================================================================
+
+// GET /api/v1/admin/system-status - Get comprehensive system status
+router.get('/system-status', async (req, res) => {
+  try {
+    // Test database connection
+    let database = true;
+    let totalSegments = 0;
+    let totalUsers = 0;
+    let segmentTypes = 0;
+    let classificationRules = 0;
+    let psIssue = null;
+
+    try {
+      // Count segments
+      totalSegments = await prisma.travelSegment.count();
+      
+      // Count users
+      totalUsers = await prisma.user.count();
+      
+      // Count segment types
+      segmentTypes = await prisma.segmentTypeConfig.count();
+      
+      // Count classification rules
+      classificationRules = await prisma.classificationRule.count({
+        where: { isActive: true }
+      });
+      
+      // Check for PS timezone issues
+      const psSegments = await prisma.travelSegment.findMany({
+        where: { type: 'private_terminal' },
+        take: 5
+      });
+      
+      if (psSegments.length > 0) {
+        const hasTimezoneIssues = psSegments.some(segment => {
+          const details = segment.details || {};
+          return !details.corrected_timezone;
+        });
+        
+        if (hasTimezoneIssues) {
+          psIssue = `${psSegments.length} PS segments may have timezone issues`;
+        }
+      }
+      
+    } catch (dbError) {
+      console.error('Database error in system status:', dbError);
+      database = false;
+    }
+
+    // Check email processor status (simplified)
+    const emailProcessor = true; // Would check actual processor status
+
+    res.json({
+      database,
+      emailProcessor,
+      totalSegments,
+      totalUsers,
+      segmentTypes,
+      classificationRules,
+      psIssue,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error checking system status:', error);
+    res.status(500).json({ error: 'Failed to check system status' });
+  }
+});
+
+// =====================================================================
+// 4. REPROCESS SEGMENTS ENDPOINT
+// =====================================================================
+
+// POST /api/v1/admin/reprocess-segments - Reprocess all travel segments
+router.post('/reprocess-segments', async (req, res) => {
+  try {
+    // Get all segments that need reprocessing
+    const segments = await prisma.travelSegment.findMany({
+      take: 100, // Limit to prevent overwhelming the system
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const segment of segments) {
+      try {
+        // Mark for reprocessing by updating a flag
+        await prisma.travelSegment.update({
+          where: { id: segment.id },
+          data: {
+            details: {
+              ...segment.details,
+              reprocessing_requested: true,
+              reprocessing_requested_at: new Date().toISOString()
+            }
+          }
+        });
+
+        results.push({ id: segment.id, status: 'queued' });
+        successCount++;
+      } catch (error) {
+        results.push({ id: segment.id, status: 'error', error: error.message });
+        errorCount++;
+      }
+    }
+
+    res.json({
+      message: `Queued ${successCount} segments for reprocessing`,
+      segmentCount: segments.length,
+      successCount,
+      errorCount,
+      results
+    });
+  } catch (error) {
+    console.error('Error reprocessing segments:', error);
+    res.status(500).json({ error: 'Failed to reprocess segments' });
+  }
+});
+
+// =====================================================================
+// 5. PS TIMEZONE FIX ENDPOINT (Update path)
+// =====================================================================
+
+// POST /api/v1/admin/fix-ps-timezone - Fix PS timezone issues
+router.post('/fix-ps-timezone', async (req, res) => {
+  try {
+    // Find all PS segments
+    const psSegments = await prisma.travelSegment.findMany({
+      where: { type: 'private_terminal' }
+    });
+
+    const results = [];
+    let updatedCount = 0;
+
+    for (const segment of psSegments) {
+      try {
+        const details = segment.details || {};
+        const serviceDetails = details.service_details || {};
+        
+        // Determine correct timezone based on facility
+        let correctTimezone = 'America/New_York'; // Default to EDT
+        const facilityName = serviceDetails.facility_name || details.locations?.origin || '';
+        
+        if (facilityName.includes('LAX') || facilityName.includes('PS LAX')) {
+          correctTimezone = 'America/Los_Angeles';
+        } else if (facilityName.includes('ORD') || facilityName.includes('PS ORD')) {
+          correctTimezone = 'America/Chicago';
+        } else if (facilityName.includes('DFW') || facilityName.includes('PS DFW')) {
+          correctTimezone = 'America/Chicago';
+        } else if (facilityName.includes('SEA') || facilityName.includes('PS SEA')) {
+          correctTimezone = 'America/Los_Angeles';
+        } else if (facilityName.includes('MIA') || facilityName.includes('PS MIA')) {
+          correctTimezone = 'America/New_York';
+        }
+
+        // Update segment with corrected timezone
+        const updated = await prisma.travelSegment.update({
+          where: { id: segment.id },
+          data: {
+            details: {
+              ...details,
+              corrected_timezone: correctTimezone,
+              timezone_fix_applied: new Date().toISOString(),
+              facility_timezone: correctTimezone
+            }
+          }
+        });
+
+        results.push({ 
+          id: segment.id, 
+          status: 'success', 
+          timezone: correctTimezone,
+          facility: facilityName 
+        });
+        updatedCount++;
+        
+      } catch (error) {
+        results.push({ id: segment.id, status: 'error', error: error.message });
+      }
+    }
+
+    res.json({
+      message: `Applied timezone fixes to ${updatedCount} PS segments`,
+      updatedCount,
+      totalSegments: psSegments.length,
+      results
+    });
+  } catch (error) {
+    console.error('Error applying PS timezone fix:', error);
+    res.status(500).json({ error: 'Failed to apply timezone fix' });
+  }
+});
+
+// =====================================================================
+// 6. ENHANCED TEST CLASSIFICATION ENDPOINT
+// =====================================================================
+
+// POST /api/v1/admin/test-classification - Test email classification
+router.post('/test-classification', async (req, res) => {
+  try {
+    const { subject, sender, content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: 'Email content is required for testing' });
+    }
+
+    // Get all active classification rules
+    const rules = await prisma.classificationRule.findMany({
+      where: { isActive: true },
+      include: {
+        segmentTypeConfig: {
+          select: { name: true, displayName: true }
+        }
+      },
+      orderBy: { priority: 'desc' }
+    });
+
+    // Test classification logic
+    const searchText = `${subject || ''} ${content} ${sender || ''}`.toLowerCase();
+    let matchedRule = null;
+    let segmentType = 'other';
+    let confidence = 'Low';
+
+    for (const rule of rules) {
+      const pattern = rule.pattern.toLowerCase();
+      let matches = false;
+
+      switch (rule.type) {
+        case 'sender':
+          matches = (sender || '').toLowerCase().includes(pattern);
+          break;
+        case 'subject':
+          matches = (subject || '').toLowerCase().includes(pattern);
+          break;
+        case 'keyword':
+          matches = searchText.includes(pattern);
+          break;
+        case 'regex':
+          try {
+            const regex = new RegExp(pattern, 'i');
+            matches = regex.test(searchText);
+          } catch (error) {
+            console.error('Invalid regex:', pattern);
+          }
+          break;
+      }
+
+      if (matches) {
+        matchedRule = rule.name;
+        segmentType = rule.segmentTypeName;
+        confidence = rule.priority > 20 ? 'High' : rule.priority > 10 ? 'Medium' : 'Low';
+        break;
+      }
+    }
+
+    res.json({
+      segmentType,
+      matchedRule,
+      confidence,
+      totalRulesChecked: rules.length,
+      rulesMatched: matchedRule ? [matchedRule] : []
+    });
+  } catch (error) {
+    console.error('Error testing classification:', error);
+    res.status(500).json({ error: 'Failed to test classification' });
+  }
+});
+
 module.exports = router;
