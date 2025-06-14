@@ -23,7 +23,15 @@ function showTab(tabName, clickedButton) {
   
   // Load admin content if admin tab selected
   if (tabName === 'admin') {
-    loadModals();
+    loadModals(); // Your existing function
+    
+    // Small delay to ensure DOM is ready, then load all admin content
+    setTimeout(() => {
+      loadSegmentTypes();     // Your existing
+      loadClassificationRules(); // Your existing
+      loadPrompts();         // NEW - AI Prompts loading
+      loadSystemStatus();    // Your existing if you have it
+    }, 100);
   }
 }
 
@@ -525,6 +533,8 @@ function displayClassificationRules(rules) {
 
 async function loadPrompts() {
   const container = document.getElementById('promptsContainer');
+  if (!container) return;
+  
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading AI prompts...</div>';
 
   try {
@@ -532,6 +542,14 @@ async function loadPrompts() {
     if (response.ok) {
       const prompts = await response.json();
       displayPrompts(prompts);
+      
+      // Add enhanced features after displaying prompts
+      setTimeout(() => {
+        addPromptsSearchAndFilter();
+        addBulkOperations();
+        loadPromptAnalytics();
+      }, 100);
+      
     } else {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
@@ -547,22 +565,6 @@ async function loadPrompts() {
     `;
   }
 }
-
-function displayPrompts(prompts) {
-  const container = document.getElementById('promptsContainer');
-  
-  if (prompts.length === 0) {
-    container.innerHTML = `
-      <div style="padding: 40px; text-align: center;">
-        <h4 style="color: #6c757d; margin-bottom: 15px;">No AI prompts configured</h4>
-        <p style="color: #6c757d; margin-bottom: 20px;">Start by creating your first AI parsing prompt for travel emails.</p>
-        <button class="btn-admin" data-action="show-modal" data-modal="createPromptModal">
-          Create First Prompt
-        </button>
-      </div>
-    `;
-    return;
-  }
 
   // Group prompts by category for better organization
   const promptsByCategory = prompts.reduce((acc, prompt) => {
@@ -1269,30 +1271,31 @@ async function reprocessAllSegments() {
 
 async function checkSystemStatus() {
   try {
-    showAlert('info', 'Checking system status...');
-    const response = await fetch('/api/admin/system-status');
-    const status = await response.json();
+    // Your existing system status logic
+    const response = await fetch('/api/v1/admin/system-status');
     
-    const resultsDiv = document.getElementById('actionResults');
-    resultsDiv.innerHTML = `
-      <div class="alert alert-info">
-        <h5>📊 System Status Report</h5>
-        <strong>Database:</strong> ${status.database ? '✅ Connected' : '❌ Disconnected'}<br>
-        <strong>Email Processor:</strong> ${status.emailProcessor ? '✅ Active' : '❌ Inactive'}<br>
-        <strong>Total Segments:</strong> ${status.totalSegments || 0}<br>
-        <strong>Total Users:</strong> ${status.totalUsers || 0}<br>
-        <strong>Segment Types:</strong> ${status.segmentTypes || 0}<br>
-        <strong>Classification Rules:</strong> ${status.classificationRules || 0}<br>
-        ${status.psIssue ? `<br>⚠️ <strong>PS Issue:</strong> ${status.psIssue}` : ''}
-        <br><br>
-        <em>Status checked at: ${new Date().toLocaleTimeString()}</em>
-      </div>
-    `;
+    // Also get prompt analytics for enhanced status
+    const promptAnalyticsResponse = await fetch('/api/v1/admin/prompts/analytics?timeframe=1d');
+    
+    const systemStatus = response.ok ? await response.json() : {};
+    const promptAnalytics = promptAnalyticsResponse.ok ? await promptAnalyticsResponse.json() : {};
+    
+    // Display enhanced system status
+    displayEnhancedSystemStatus(systemStatus, promptAnalytics);
+    
   } catch (error) {
-    const resultsDiv = document.getElementById('actionResults');
+    console.error('Error checking system status:', error);
+    // Your existing error handling
+    let resultsDiv = document.getElementById('actionResults');
+    if (!resultsDiv) {
+      resultsDiv = document.createElement('div');
+      resultsDiv.id = 'actionResults';
+      document.querySelector('.admin-panel').appendChild(resultsDiv);
+    }
+    
     resultsDiv.innerHTML = `
       <div class="alert alert-danger">
-        ❌ Could not check system status. Admin system may not be set up.
+        ❌ Could not check system status. Error: ${error.message}
       </div>
     `;
   }
@@ -1966,11 +1969,15 @@ function loadModals() {
 }
 
 // =====================================================================
-// 7. INITIALIZATION - UPDATE DOMCONTENTLOADED
+// CONSOLIDATED INITIALIZATION - REPLACE YOUR EXISTING DOMCONTENTLOADED SECTIONS
 // =====================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Setup tab navigation event listeners
+  console.log('🚀 Initializing enhanced admin system...');
+  
+  // =================================================================
+  // 1. EXISTING TAB NAVIGATION SETUP
+  // =================================================================
   document.querySelectorAll('.tab-button').forEach(button => {
     button.addEventListener('click', function(e) {
       const tabName = this.getAttribute('data-tab');
@@ -1978,42 +1985,155 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   
-  // Setup admin action listeners
+  // =================================================================
+  // 2. EXISTING ADMIN ACTION LISTENERS
+  // =================================================================
   setupAdminActionListeners();
   
-  // Create working modals immediately
-  createWorkingModals();
+  // =================================================================
+  // 3. EXISTING MODAL MANAGEMENT
+  // =================================================================
+  createWorkingModals(); // Your existing function
   
-  // Initialize admin content if starting on admin tab
+  // =================================================================
+  // 4. NEW AI PROMPTS ENHANCEMENTS
+  // =================================================================
+  
+  // Add prompt-specific styles
+  addEnhancedPromptStyles();
+  
+  // Add prompt modals to the DOM
+  const modalContainer = document.querySelector('#modals-container') || document.body;
+  modalContainer.insertAdjacentHTML('beforeend', createPromptModals());
+  modalContainer.insertAdjacentHTML('beforeend', createPromptTestModal());
+  
+  // Setup enhanced form handlers (includes your existing + new prompt handlers)
+  setupEnhancedFormHandlers();
+  
+  // Setup keyboard shortcuts for power users
+  setupKeyboardShortcuts();
+  
+  // Add help button
+  addPromptsHelpButton();
+  
+  // Setup dynamic click handling for new features
+  setupDynamicClickHandlers();
+  
+  // =================================================================
+  // 5. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
+  // =================================================================
   if (window.location.hash === '#admin') {
     const adminButton = document.querySelector('[data-tab="admin"]');
     if (adminButton) {
       adminButton.click();
     }
   }
+  
+  console.log('✅ Enhanced admin system fully initialized');
 });
 
 // =====================================================================
-// INITIALIZATION
+// ENHANCED FORM HANDLERS - COMBINES EXISTING + NEW FUNCTIONALITY
 // =====================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
-  // Setup tab navigation event listeners
-  document.querySelectorAll('.tab-button').forEach(button => {
-    button.addEventListener('click', function(e) {
-      const tabName = this.getAttribute('data-tab');
-      showTab(tabName, this);
-    });
-  });
+function setupEnhancedFormHandlers() {
+  // Your existing form handlers
+  setupFormEventListeners(); // Keep your existing function
   
-  // Setup admin action listeners
-  setupAdminActionListeners();
+  // New AI Prompts form handlers
+  setupPromptFormHandlers();
+  setupPromptTestForm();
+}
+
+// =====================================================================
+// DYNAMIC CLICK HANDLING FOR NEW AI PROMPTS FEATURES
+// =====================================================================
+
+function setupDynamicClickHandlers() {
+  // Enhanced event delegation for dynamic content
+  document.addEventListener('click', handleDynamicClicks);
+}
+
+function handleDynamicClicks(e) {
+  const target = e.target;
+  const action = target.getAttribute('data-action');
   
-  // Initialize admin content if starting on admin tab
-  if (window.location.hash === '#admin') {
-    const adminButton = document.querySelector('[data-tab="admin"]');
-    if (adminButton) {
-      adminButton.click();
-    }
+  if (!action) return;
+  
+  // Handle your existing actions first
+  switch (action) {
+    case 'show-modal':
+      const modalId = target.getAttribute('data-modal');
+      if (modalId === 'testPromptModal') {
+        showTestModal();
+      } else {
+        showModal(modalId);
+      }
+      break;
+      
+    // New AI Prompts actions
+    case 'edit-prompt':
+      const promptId = target.getAttribute('data-id');
+      editPrompt(promptId);
+      break;
+      
+    case 'toggle-prompt':
+      const togglePromptId = target.getAttribute('data-id');
+      const newState = target.getAttribute('data-active') === 'true';
+      togglePromptStatus(togglePromptId, newState);
+      break;
+      
+    case 'duplicate-prompt':
+      const duplicatePromptId = target.getAttribute('data-id');
+      duplicatePrompt(duplicatePromptId);
+      break;
+      
+    case 'delete-prompt':
+      const deletePromptId = target.getAttribute('data-id');
+      deletePrompt(deletePromptId);
+      break;
+      
+    // Keep your existing admin actions
+    case 'check-system-status':
+      checkSystemStatus();
+      break;
+      
+    case 'hide-modal':
+      const hideModalId = target.getAttribute('data-modal');
+      hideModal(hideModalId);
+      break;
   }
-});
+}
+
+// =====================================================================
+// GLOBAL EXPORTS - PUT THIS AT THE VERY END OF YOUR FILE
+// =====================================================================
+
+// Make sure these functions are available globally for any remaining 
+// onclick handlers or external scripts that might need them
+window.showTab = showTab;
+window.checkSystemStatus = checkSystemStatus;
+window.loadPrompts = loadPrompts;
+window.showTestModal = showTestModal;
+window.exportPrompts = exportPrompts;
+window.showImportModal = showImportModal;
+window.hideModal = hideModal;
+window.showModal = showModal;
+window.loadSegmentTypes = loadSegmentTypes;
+window.loadClassificationRules = loadClassificationRules;
+
+// Also export any other functions that might be called from HTML or other scripts
+window.editPrompt = editPrompt;
+window.togglePromptStatus = togglePromptStatus;
+window.duplicatePrompt = duplicatePrompt;
+window.deletePrompt = deletePrompt;
+window.bulkActivatePrompts = bulkActivatePrompts;
+window.bulkDeactivatePrompts = bulkDeactivatePrompts;
+window.bulkSetTestGroup = bulkSetTestGroup;
+window.bulkDeletePrompts = bulkDeletePrompts;
+window.clearSelection = clearSelection;
+window.clearPromptsFilters = clearPromptsFilters;
+window.showPromptsHelp = showPromptsHelp;
+window.refreshSystemStatus = () => checkSystemStatus();
+
+console.log('📦 Global admin functions exported to window object');
