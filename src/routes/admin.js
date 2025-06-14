@@ -15,8 +15,10 @@ router.get('/segment-types', async (req, res) => {
   try {
     const segmentTypes = await prisma.segmentTypeConfig.findMany({
       include: {
-        classificationRules: {
-          where: { isActive: true },
+        classification_rules: {  // Changed from classificationRules
+          where: {
+            isActive: true
+          },
           select: {
             id: true,
             name: true,
@@ -25,18 +27,22 @@ router.get('/segment-types', async (req, res) => {
             priority: true,
             isActive: true
           },
-          orderBy: { priority: 'desc' }
+          orderBy: {
+            priority: "desc"
+          }
         },
-        timezoneRules: {
+        timezone_rules: {  // Changed from timezoneRules
           select: {
             id: true,
             locationPattern: true,
             timezone: true,
             priority: true
           },
-          orderBy: { priority: 'desc' }
+          orderBy: {
+            priority: "desc"
+          }
         },
-        displayRules: {
+        display_rules: {  // Changed from displayRules
           select: {
             id: true,
             primaryTimeField: true,
@@ -46,10 +52,12 @@ router.get('/segment-types', async (req, res) => {
           }
         }
       },
-      orderBy: { name: 'asc' }
+      orderBy: {
+        name: "asc"
+      }
     });
 
-    // Transform for frontend compatibility
+    // Transform for frontend compatibility (keeping camelCase for frontend)
     const transformedTypes = segmentTypes.map(type => ({
       id: type.id,
       name: type.name,
@@ -60,7 +68,7 @@ router.get('/segment-types', async (req, res) => {
       display_config: type.displayConfig,
       created_at: type.createdAt,
       updated_at: type.updatedAt,
-      classificationRules: type.classificationRules.map(rule => ({
+      classificationRules: type.classification_rules.map(rule => ({  // Transform back to camelCase
         id: rule.id,
         name: rule.name,
         pattern: rule.pattern,
@@ -68,8 +76,8 @@ router.get('/segment-types', async (req, res) => {
         priority: rule.priority,
         isActive: rule.isActive
       })),
-      timezoneRules: type.timezoneRules,
-      displayRules: type.displayRules
+      timezoneRules: type.timezone_rules,  // Transform back to camelCase
+      displayRules: type.display_rules      // Transform back to camelCase
     }));
 
     res.json(transformedTypes);
@@ -78,7 +86,6 @@ router.get('/segment-types', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch segment types' });
   }
 });
-
 // POST /api/admin/segment-types - Create new segment type
 
 router.post('/segment-types', async (req, res) => {
