@@ -14,7 +14,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node scripts/seed.js",
-    "docs:serve": "redoc-cli serve docs/openapi.yaml"
+    "docs:serve": "redoc-cli serve docs/openapi.yaml",
+    "studio": "node scripts/studio.js"
   },
   "keywords": [
     "travel",
