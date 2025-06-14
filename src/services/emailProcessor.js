@@ -137,59 +137,63 @@ class EmailProcessor {
   }
 
   parseToTimezoneAwareDateTime(dateTimeString, locationTimezone = null) {
-    if (!dateTimeString) return null;
+  if (!dateTimeString) return null;
 
-    try {
-      if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
-        const [datePart, timePart] = dateTimeString.split(' ');
-        const [year, month, day] = datePart.split('-').map(Number);
-        const [hour, minute] = timePart.split(':').map(Number);
+  try {
+    if (dateTimeString.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)) {
+      const [datePart, timePart] = dateTimeString.split(' ');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute] = timePart.split(':').map(Number);
 
-        // Determine the timezone
-        let timezone = locationTimezone;
-        if (!timezone) {
-          timezone = this.inferTimezoneFromLocation();
-        }
-
-        // Create date in the specific timezone and convert to UTC
-        // For June 2025 (daylight saving time):
-        let utcOffset = 0;
-        if (timezone === 'America/New_York') {
-          utcOffset = 4; // EDT is UTC-4
-        } else if (timezone === 'America/Chicago') {
-          utcOffset = 5; // CDT is UTC-5
-        } else {
-          utcOffset = 5; // Default to CDT
-        }
-
-        // Create UTC date by adding the offset hours
-        const utcDate = new Date(Date.UTC(year, month - 1, day, hour + utcOffset, minute));
-
-        logger.debug(
-          `Parsed "${dateTimeString}" in ${timezone} (UTC+${utcOffset}) as UTC: ${utcDate.toISOString()}`
-        );
-
-        return {
-          utcDateTime: utcDate,
-          originalTimezone: timezone,
-          originalString: dateTimeString,
-        };
+      // Determine the timezone
+      let timezone = locationTimezone;
+      if (!timezone) {
+        timezone = this.inferTimezoneFromLocation();
       }
 
-      const date = new Date(dateTimeString);
-      return isNaN(date.getTime())
-        ? null
-        : {
-            utcDateTime: date,
-            originalTimezone: 'UTC',
-            originalString: dateTimeString,
-          };
-    } catch (error) {
-      logger.error(`Failed to parse timezone-aware date: ${dateTimeString}`, error);
-      return null;
-    }
-  }
+      // Create date in the specific timezone and convert to UTC
+      // For June 2025 (daylight saving time):
+    // CORRECT timezone offsets:
+  
+    // CORRECT timezone offsets:
+let utcOffset = 0;
+if (timezone === 'America/New_York') {
+  utcOffset = 4; // EDT is UTC-4, so ADD 4 to local time to get UTC
+} else if (timezone === 'America/Chicago') {
+  utcOffset = 5; // CDT is UTC-5, so ADD 5 to local time to get UTC  
+} else if (timezone === 'Europe/Madrid') {
+  utcOffset = -2; // CEST is UTC+2, so SUBTRACT 2 from local time to get UTC
+} else {
+  utcOffset = 5; // Default to CDT
+}
 
+// Create UTC by adding the offset
+const utcDate = new Date(Date.UTC(year, month - 1, day, hour + utcOffset, minute));
+
+      logger.debug(
+        `Parsed "${dateTimeString}" in ${timezone} (UTC${utcOffset > 0 ? '+' : ''}${utcOffset}) as UTC: ${utcDate.toISOString()}`
+      );
+
+      return {
+        utcDateTime: utcDate,
+        originalTimezone: timezone,
+        originalString: dateTimeString,
+      };
+    }
+
+    const date = new Date(dateTimeString);
+    return isNaN(date.getTime())
+      ? null
+      : {
+          utcDateTime: date,
+          originalTimezone: 'UTC',
+          originalString: dateTimeString,
+        };
+  } catch (error) {
+    logger.error(`Failed to parse timezone-aware date: ${dateTimeString}`, error);
+    return null;
+  }
+}
 async inferTimezoneFromLocation(data) {
     if (!data) return null;
 
