@@ -242,3 +242,54 @@ model EmailSenderRule {
   @@map("email_sender_rules")
   @@index([trustLevel])
 }
+
+model SegmentTypeConfig {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  displayName     String   @map("display_name")
+  description     String?
+  isActive        Boolean  @default(true) @map("is_active")
+  defaultTimezone String   @default("America/New_York") @map("default_timezone")
+  displayConfig   Json?    @map("display_config")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@map("segment_type_configs")
+}
+
+model ClassificationRule {
+  id              Int      @id @default(autoincrement())
+  name            String
+  segmentTypeName String   @map("segment_type_name")
+  pattern         String
+  type            String   @default("keyword")
+  priority        Int      @default(10)
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  @@map("classification_rules")
+}
+
+model TimezoneRule {
+  id              Int      @id @default(autoincrement())
+  segmentTypeName String   @map("segment_type_name")
+  locationPattern String   @map("location_pattern")
+  timezone        String
+  priority        Int      @default(10)
+  createdAt       DateTime @default(now()) @map("created_at")
+  
+  @@map("timezone_rules")
+}
+
+model DisplayRule {
+  id                Int      @id @default(autoincrement())
+  segmentTypeName   String   @map("segment_type_name")
+  primaryTimeField  String   @default("departure") @map("primary_time_field")
+  timezoneSource    String   @default("origin") @map("timezone_source")
+  routeFormat       String   @default("{origin} → {destination}") @map("route_format")
+  customFields      Json?    @map("custom_fields")
+  createdAt         DateTime @default(now()) @map("created_at")
+  
+  @@map("display_rules")
+}
