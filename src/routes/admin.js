@@ -10,54 +10,77 @@ const prisma = new PrismaClient();
 // =====================================================================
 
 // GET /api/admin/segment-types - List all configured segment types
+
 router.get('/segment-types', async (req, res) => {
   try {
-    const segmentTypes = await prisma.$queryRaw`
-      SELECT 
-        stc.*,
-        COALESCE(
-          json_agg(
-            CASE WHEN cr.id IS NOT NULL THEN
-              json_build_object(
-                'id', cr.id,
-                'name', cr.name,
-                'pattern', cr.pattern,
-                'type', cr.type,
-                'priority', cr.priority,
-                'isActive', cr.is_active
-              )
-            END
-          ) FILTER (WHERE cr.id IS NOT NULL), 
-          '[]'::json
-        ) as "classificationRules",
-        COALESCE(
-          json_agg(
-            CASE WHEN tr.id IS NOT NULL THEN
-              json_build_object(
-                'id', tr.id,
-                'locationPattern', tr.location_pattern,
-                'timezone', tr.timezone,
-                'priority', tr.priority
-              )
-            END
-          ) FILTER (WHERE tr.id IS NOT NULL), 
-          '[]'::json
-        ) as "timezoneRules"
-      FROM segment_type_configs stc
-      LEFT JOIN classification_rules cr ON stc.name = cr.segment_type_name AND cr.is_active = true
-      LEFT JOIN timezone_rules tr ON stc.name = tr.segment_type_name
-      GROUP BY stc.id, stc.name, stc.display_name, stc.description, stc.is_active, stc.default_timezone, stc.display_config, stc.created_at, stc.updated_at
-      ORDER BY stc.name
-    `;
+    const segmentTypes = await prisma.segmentTypeConfig.findMany({
+      include: {
+        classificationRules: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            pattern: true,
+            type: true,
+            priority: true,
+            isActive: true
+          },
+          orderBy: { priority: 'desc' }
+        },
+        timezoneRules: {
+          select: {
+            id: true,
+            locationPattern: true,
+            timezone: true,
+            priority: true
+          },
+          orderBy: { priority: 'desc' }
+        },
+        displayRules: {
+          select: {
+            id: true,
+            primaryTimeField: true,
+            timezoneSource: true,
+            routeFormat: true,
+            customFields: true
+          }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
 
-    res.json(segmentTypes);
+    // Transform for frontend compatibility
+    const transformedTypes = segmentTypes.map(type => ({
+      id: type.id,
+      name: type.name,
+      display_name: type.displayName,
+      description: type.description,
+      is_active: type.isActive,
+      default_timezone: type.defaultTimezone,
+      display_config: type.displayConfig,
+      created_at: type.createdAt,
+      updated_at: type.updatedAt,
+      classificationRules: type.classificationRules.map(rule => ({
+        id: rule.id,
+        name: rule.name,
+        pattern: rule.pattern,
+        type: rule.type,
+        priority: rule.priority,
+        isActive: rule.isActive
+      })),
+      timezoneRules: type.timezoneRules,
+      displayRules: type.displayRules
+    }));
+
+    res.json(transformedTypes);
   } catch (error) {
     console.error('Error fetching segment types:', error);
-    res.status(500).json({ error: 'Failed to fetch segment types. Admin system may not be set up.' });
+    res.status(500).json({ error: 'Failed to fetch segment types' });
   }
 });
 
 // POST /api/admin/segment-types - Create new segment type
+
 router.post('/segment-types', async (req, res) => {
   try {
     const {
@@ -79,21 +102,26 @@ router.post('/segment-types', async (req, res) => {
       });
     }
 
-    // Validate name format (lowercase, underscore separated)
+    // Validate name format
     if (!/^[a-z][a-z0-9_]*$/.test(name)) {
       return res.status(400).json({
         error: 'Name must be lowercase and underscore separated (e.g., car_rental)'
       });
     }
 
-    // Start transaction
+    // Use transaction for atomicity
     const result = await prisma.$transaction(async (tx) => {
       // Create segment type config
-      const segmentType = await tx.$executeRaw`
-        INSERT INTO segment_type_configs (name, display_name, description, is_active, default_timezone, display_config)
-        VALUES (${name}, ${displayName}, ${description}, ${isActive}, ${defaultTimezone}, ${JSON.stringify(displayConfig)}::jsonb)
-        RETURNING *
-      `;
+      const segmentType = await tx.segmentTypeConfig.create({
+        data: {
+          name,
+          displayName,
+          description,
+          isActive,
+          defaultTimezone,
+          displayConfig
+        }
+      });
 
       // Create parsing prompt
       await tx.promptTemplate.create({
@@ -107,24 +135,30 @@ router.post('/segment-types', async (req, res) => {
         }
       });
 
-      // Create default classification rules if provided
+      // Create classification rules if provided
       if (classificationRules.length > 0) {
-        for (const rule of classificationRules) {
-          await tx.$executeRaw`
-            INSERT INTO classification_rules (name, segment_type_name, pattern, type, priority, is_active)
-            VALUES (${rule.name}, ${name}, ${rule.pattern}, ${rule.type || 'keyword'}, ${rule.priority || 10}, ${rule.isActive !== false})
-          `;
-        }
+        await tx.classificationRule.createMany({
+          data: classificationRules.map(rule => ({
+            name: rule.name,
+            segmentTypeName: name,
+            pattern: rule.pattern,
+            type: rule.type || 'keyword',
+            priority: rule.priority || 10,
+            isActive: rule.isActive !== false
+          }))
+        });
       }
 
       // Create timezone rules if provided
       if (timezoneRules.length > 0) {
-        for (const tzRule of timezoneRules) {
-          await tx.$executeRaw`
-            INSERT INTO timezone_rules (segment_type_name, location_pattern, timezone, priority)
-            VALUES (${name}, ${tzRule.locationPattern}, ${tzRule.timezone}, ${tzRule.priority || 10})
-          `;
-        }
+        await tx.timezoneRule.createMany({
+          data: timezoneRules.map(rule => ({
+            segmentTypeName: name,
+            locationPattern: rule.locationPattern,
+            timezone: rule.timezone,
+            priority: rule.priority || 10
+          }))
+        });
       }
 
       return segmentType;
@@ -132,7 +166,11 @@ router.post('/segment-types', async (req, res) => {
 
     res.status(201).json({ 
       message: 'Segment type created successfully',
-      segmentType: { name, displayName, isActive }
+      segmentType: {
+        name: result.name,
+        displayName: result.displayName,
+        isActive: result.isActive
+      }
     });
   } catch (error) {
     console.error('Error creating segment type:', error);
@@ -144,6 +182,42 @@ router.post('/segment-types', async (req, res) => {
     }
   }
 });
+
+// UPDATE segment type
+router.put('/segment-types/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { displayName, description, isActive, defaultTimezone } = req.body;
+
+    const segmentType = await prisma.segmentTypeConfig.update({
+      where: { name },
+      data: {
+        displayName,
+        description,
+        isActive,
+        defaultTimezone
+      }
+    });
+
+    res.json({ 
+      message: 'Segment type updated successfully',
+      segmentType: {
+        name: segmentType.name,
+        displayName: segmentType.displayName,
+        isActive: segmentType.isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error updating segment type:', error);
+    
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Segment type not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update segment type' });
+    }
+  }
+});
+
 
 // PUT /api/admin/segment-types/:name - Update segment type
 router.put('/segment-types/:name', async (req, res) => {
@@ -212,24 +286,35 @@ router.put('/classification-rules/:id', async (req, res) => {
     const { id } = req.params;
     const { pattern, type, priority, isActive } = req.body;
 
-    const result = await prisma.$executeRaw`
-      UPDATE classification_rules 
-      SET pattern = ${pattern}, 
-          type = ${type}, 
-          priority = ${priority}, 
-          is_active = ${isActive},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${parseInt(id)}
-    `;
+    const rule = await prisma.classificationRule.update({
+      where: { id: parseInt(id) },
+      data: {
+        pattern,
+        type,
+        priority,
+        isActive
+      }
+    });
 
-    if (result === 0) {
-      return res.status(404).json({ error: 'Classification rule not found' });
-    }
-
-    res.json({ message: 'Classification rule updated successfully' });
+    res.json({ 
+      message: 'Classification rule updated successfully',
+      rule: {
+        id: rule.id,
+        name: rule.name,
+        pattern: rule.pattern,
+        type: rule.type,
+        priority: rule.priority,
+        is_active: rule.isActive
+      }
+    });
   } catch (error) {
     console.error('Error updating classification rule:', error);
-    res.status(500).json({ error: 'Failed to update classification rule' });
+    
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Classification rule not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to update classification rule' });
+    }
   }
 });
 
@@ -238,18 +323,19 @@ router.delete('/classification-rules/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await prisma.$executeRaw`
-      DELETE FROM classification_rules WHERE id = ${parseInt(id)}
-    `;
-
-    if (result === 0) {
-      return res.status(404).json({ error: 'Classification rule not found' });
-    }
+    await prisma.classificationRule.delete({
+      where: { id: parseInt(id) }
+    });
 
     res.json({ message: 'Classification rule deleted successfully' });
   } catch (error) {
     console.error('Error deleting classification rule:', error);
-    res.status(500).json({ error: 'Failed to delete classification rule' });
+    
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Classification rule not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to delete classification rule' });
+    }
   }
 });
 
@@ -491,71 +577,6 @@ router.post('/quick-fixes/ps-timezone', async (req, res) => {
   }
 });
 
-// POST /api/admin/test-classification
-router.post('/test-classification', async (req, res) => {
-  try {
-    const { subject, sender, content } = req.body;
-
-    if (!content) {
-      return res.status(400).json({ error: 'Email content is required for testing' });
-    }
-
-    // Get all classification rules
-    const rules = await prisma.$queryRaw`
-      SELECT cr.*, stc.name as segment_type_name
-      FROM classification_rules cr
-      JOIN segment_type_configs stc ON cr.segment_type_name = stc.name
-      WHERE cr.is_active = true AND stc.is_active = true
-      ORDER BY cr.priority DESC
-    `;
-
-    // Test classification logic
-    const searchText = `${subject || ''} ${content} ${sender || ''}`.toLowerCase();
-    let matchedRule = null;
-    let segmentType = 'other';
-
-    for (const rule of rules) {
-      const pattern = rule.pattern.toLowerCase();
-      let matches = false;
-
-      switch (rule.type) {
-        case 'sender':
-          matches = (sender || '').toLowerCase().includes(pattern);
-          break;
-        case 'subject':
-          matches = (subject || '').toLowerCase().includes(pattern);
-          break;
-        case 'keyword':
-          matches = searchText.includes(pattern);
-          break;
-        case 'regex':
-          try {
-            const regex = new RegExp(pattern, 'i');
-            matches = regex.test(searchText);
-          } catch (error) {
-            console.error('Invalid regex:', pattern);
-          }
-          break;
-      }
-
-      if (matches) {
-        matchedRule = rule.name;
-        segmentType = rule.segment_type_name;
-        break;
-      }
-    }
-
-    res.json({
-      segmentType,
-      matchedRule,
-      confidence: matchedRule ? 'High' : 'Low',
-      totalRulesChecked: rules.length
-    });
-  } catch (error) {
-    console.error('Error testing classification:', error);
-    res.status(500).json({ error: 'Failed to test classification' });
-  }
-});
 
 // =====================================================================
 // 1. CLASSIFICATION RULES CRUD ENDPOINTS
@@ -613,6 +634,7 @@ router.delete('/classification-rules/:id', async (req, res) => {
 });
 
 // POST /api/v1/admin/classification-rules - Create classification rule
+
 router.post('/classification-rules', async (req, res) => {
   try {
     const { ruleName, segmentType, pattern, ruleType = 'keyword', priority = 10, isActive = true } = req.body;
@@ -631,19 +653,38 @@ router.post('/classification-rules', async (req, res) => {
         type: ruleType,
         priority,
         isActive
+      },
+      include: {
+        segmentTypeConfig: {
+          select: { displayName: true }
+        }
       }
     });
 
     res.status(201).json({ 
       message: 'Classification rule created successfully',
-      rule
+      rule: {
+        id: rule.id,
+        name: rule.name,
+        pattern: rule.pattern,
+        type: rule.type,
+        priority: rule.priority,
+        is_active: rule.isActive,
+        segmentType: rule.segmentTypeName
+      }
     });
   } catch (error) {
     console.error('Error creating classification rule:', error);
-    res.status(500).json({ error: 'Failed to create classification rule' });
+    
+    if (error.code === 'P2002') {
+      res.status(409).json({ error: 'Classification rule with this name already exists' });
+    } else if (error.code === 'P2003') {
+      res.status(400).json({ error: 'Invalid segment type specified' });
+    } else {
+      res.status(500).json({ error: 'Failed to create classification rule' });
+    }
   }
 });
-
 // =====================================================================
 // 2. PROMPTS MANAGEMENT ENDPOINTS
 // =====================================================================
@@ -753,61 +794,41 @@ router.put('/prompts/:id', async (req, res) => {
 // =====================================================================
 
 // GET /api/v1/admin/system-status - Get comprehensive system status
+
 router.get('/system-status', async (req, res) => {
   try {
-    let database = true;
-    let totalSegments = 0;
-    let totalUsers = 0;
-    let segmentTypes = 0;
-    let classificationRules = 0;
-    let psIssue = null;
-
-    try {
-      // FIXED: Use correct model names
-      totalSegments = await prisma.segment.count();
-      totalUsers = await prisma.user.count();
-      
-      // Check if admin models exist, use raw SQL if not
-      try {
-        segmentTypes = await prisma.segmentTypeConfig.count();
-      } catch {
-        const result = await prisma.$queryRaw`SELECT COUNT(*) as count FROM segment_type_configs`;
-        segmentTypes = parseInt(result[0].count);
-      }
-      
-      try {
-        classificationRules = await prisma.classificationRule.count({
-          where: { isActive: true }
-        });
-      } catch {
-        const result = await prisma.$queryRaw`SELECT COUNT(*) as count FROM classification_rules WHERE is_active = true`;
-        classificationRules = parseInt(result[0].count);
-      }
-      
-      // Check for PS timezone issues - FIXED model name
-      const psSegments = await prisma.segment.findMany({
+    // Get all counts in parallel for better performance
+    const [
+      totalSegments,
+      totalUsers,
+      segmentTypes,
+      classificationRules,
+      psSegments
+    ] = await Promise.all([
+      prisma.segment.count(),
+      prisma.user.count(),
+      prisma.segmentTypeConfig.count(),
+      prisma.classificationRule.count({
+        where: { isActive: true }
+      }),
+      prisma.segment.findMany({
         where: { type: 'private_terminal' },
         take: 5
-      });
-      
-      if (psSegments.length > 0) {
-        const hasTimezoneIssues = psSegments.some(segment => {
-          const details = segment.details || {};
-          return !details.corrected_timezone;
-        });
-        
-        if (hasTimezoneIssues) {
-          psIssue = `${psSegments.length} PS segments may have timezone issues`;
-        }
-      }
-      
-    } catch (dbError) {
-      console.error('Database error in system status:', dbError);
-      database = false;
-    }
+      })
+    ]);
+
+    // Check for PS timezone issues
+    const hasTimezoneIssues = psSegments.some(segment => {
+      const details = segment.details || {};
+      return !details.corrected_timezone;
+    });
+
+    const psIssue = hasTimezoneIssues 
+      ? `${psSegments.length} PS segments may have timezone issues` 
+      : null;
 
     res.json({
-      database,
+      database: true,
       emailProcessor: true,
       totalSegments,
       totalUsers,
@@ -955,12 +976,15 @@ router.post('/test-classification', async (req, res) => {
       return res.status(400).json({ error: 'Email content is required for testing' });
     }
 
-    // Get all active classification rules
+    // Get all active classification rules with segment type info
     const rules = await prisma.classificationRule.findMany({
       where: { isActive: true },
       include: {
         segmentTypeConfig: {
-          select: { name: true, displayName: true }
+          select: { 
+            name: true, 
+            displayName: true 
+          }
         }
       },
       orderBy: { priority: 'desc' }
@@ -1016,5 +1040,4 @@ router.post('/test-classification', async (req, res) => {
     res.status(500).json({ error: 'Failed to test classification' });
   }
 });
-
 module.exports = router;
