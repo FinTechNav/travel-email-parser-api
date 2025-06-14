@@ -103,7 +103,7 @@ model PromptTemplate {
   category        String   @map("category")
   type            String   @map("type")
   version         Int      @default(1) @map("version")
-  prompt          String   @map("prompt")
+  prompt          String   @db.Text @map("prompt")  // ← ADD @db.Text HERE
   variables       Json?    @map("variables")
   isActive        Boolean  @default(true) @map("is_active")
   metadata        Json?    @map("metadata")

@@ -197,6 +197,8 @@ class AIParser {
       );
 
       const startTime = Date.now();
+logger.info('🔍 SENDING TO AI - Prompt length:', prompt.length);
+logger.info('🔍 SENDING TO AI - Prompt preview:', prompt.substring(0, 200) + '...' + prompt.slice(-200));
 
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -207,6 +209,8 @@ class AIParser {
       });
 
       const content = response.choices[0].message.content.trim();
+      logger.info('🔍 AI RESPONSE - Length:', content.length);
+logger.info('🔍 AI RESPONSE - Content:', content);
       const responseTime = Date.now() - startTime;
 
       logger.debug(`AI response length: ${content.length} characters (${responseTime}ms)`);

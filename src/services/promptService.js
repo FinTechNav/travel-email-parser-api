@@ -88,6 +88,8 @@ class PromptService {
 
   // Handle special flight case (different structure)
   if (emailType === 'flight' && typeTemplate) {
+        console.log('🔍 Flight template length:', typeTemplate.prompt.length);
+    console.log('🔍 Flight template end:', typeTemplate.prompt.slice(-50));
     const timeParsingInstructions = `
 CRITICAL TIME PARSING RULES:
 - Convert ALL times to 24-hour format (HH:MM) 
@@ -103,6 +105,9 @@ ${this.formatExtractedTimes(extractedTimes)}`;
       timeParsingInstructions,
       extractedTimes: this.formatExtractedTimes(extractedTimes)
     });
+        console.log('🔍 Final prompt length:', finalPrompt.length);
+    console.log('🔍 Final prompt end:', finalPrompt.slice(-50));
+        return finalPrompt;
   }
 
   // For other types, combine base + type-specific prompts
@@ -134,14 +139,20 @@ formatExtractedTimes(extractedTimes) {
 
 // Make sure your interpolatePrompt method handles all the variables
 interpolatePrompt(template, variables) {
+  console.log('🔍 INTERPOLATE - Template length:', template.length);
+  console.log('🔍 INTERPOLATE - Variables:', Object.keys(variables));
+  
   let result = template;
   
   // Replace all variables
   Object.keys(variables).forEach(key => {
     const placeholder = `{{${key}}}`;
-    result = result.replace(new RegExp(placeholder, 'g'), variables[key] || '');
+    const value = variables[key] || '';
+    console.log(`🔍 INTERPOLATE - Replacing ${placeholder} with ${value.length} chars`);
+    result = result.replace(new RegExp(placeholder, 'g'), value);
   });
   
+  console.log('🔍 INTERPOLATE - Final length:', result.length);
   return result;
 }
 

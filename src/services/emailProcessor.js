@@ -530,7 +530,9 @@ async inferTimezoneFromLocation(data) {
         logger.info(`Original return: "${data.travel_dates?.return}"`);
         logger.info(`Parsed startDateTime UTC: ${startDateInfo?.utcDateTime?.toISOString()}`);
         logger.info(`Parsed endDateTime UTC: ${endDateInfo?.utcDateTime?.toISOString()}`);
-        logger.info(`Inferred timezone: ${this.inferTimezoneFromLocation(data)}`);
+        const timezone = await this.inferTimezoneFromLocation(data);
+logger.info(`Inferred timezone: ${timezone}`);
+
         logger.info('=== END DATABASE DEBUG ===');
 
         const segment = await this.prisma.segment.create({
