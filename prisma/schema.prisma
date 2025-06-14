@@ -3,9 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -98,24 +97,23 @@ model ProcessedEmail {
 }
 
 model PromptTemplate {
-  id              String   @id @default(cuid())
-  name            String   @unique @map("name")
-  category        String   @map("category")
-  type            String   @map("type")
-  version         Int      @default(1) @map("version")
-  prompt          String   @db.Text @map("prompt")  // ← ADD @db.Text HERE
-  variables       Json?    @map("variables")
-  isActive        Boolean  @default(true) @map("is_active")
-  metadata        Json?    @map("metadata")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  createdBy       String?  @map("created_by")
-  testGroup       String?  @map("test_group")
-  successRate     Float?   @map("success_rate")
-  usageCount      Int      @default(0) @map("usage_count")
-  segmentTypeName String?  @map("segment_type_name")
-
-  usage             PromptUsage[]
+  id              String        @id @default(cuid())
+  name            String        @unique @map("name")
+  category        String        @map("category")
+  type            String        @map("type")
+  version         Int           @default(1) @map("version")
+  prompt          String        @map("prompt")
+  variables       Json?         @map("variables")
+  isActive        Boolean       @default(true) @map("is_active")
+  metadata        Json?         @map("metadata")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdBy       String?       @map("created_by")
+  testGroup       String?       @map("test_group")
+  successRate     Float?        @map("success_rate")
+  usageCount      Int           @default(0) @map("usage_count")
+  segmentTypeName String?       @map("segment_type_name")
+  usage           PromptUsage[]
 
   @@map("prompt_templates")
 }
@@ -275,8 +273,8 @@ model DisplayRule {
 
 model TimezoneCache {
   id        Int      @id @default(autoincrement())
-  location  String   @unique @db.VarChar(255) @map("location")
-  timezone  String   @db.VarChar(100) @map("timezone")
+  location  String   @unique @map("location") @db.VarChar(255)
+  timezone  String   @map("timezone") @db.VarChar(100)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 

@@ -199,6 +199,9 @@ class AIParser {
       const startTime = Date.now();
 logger.info('🔍 SENDING TO AI - Prompt length:', prompt.length);
 logger.info('🔍 SENDING TO AI - Prompt preview:', prompt.substring(0, 200) + '...' + prompt.slice(-200));
+console.log('🔍 BEFORE OPENAI - prompt exists:', !!prompt);
+console.log('🔍 BEFORE OPENAI - prompt length:', prompt ? prompt.length : 'UNDEFINED');
+console.log('🔍 BEFORE OPENAI - prompt preview:', prompt ? prompt.substring(0, 200) : 'NO PROMPT');
 
       const response = await this.client.chat.completions.create({
         model: this.model,
@@ -208,9 +211,13 @@ logger.info('🔍 SENDING TO AI - Prompt preview:', prompt.substring(0, 200) + '
         response_format: this.responseFormat,
       });
 
-      const content = response.choices[0].message.content.trim();
-      logger.info('🔍 AI RESPONSE - Length:', content.length);
-logger.info('🔍 AI RESPONSE - Content:', content);
+console.log('🔍 OPENAI RESPONSE - exists:', !!response);
+console.log('🔍 OPENAI RESPONSE - choices:', response.choices?.length || 0);
+console.log('🔍 OPENAI RESPONSE - content exists:', !!response.choices?.[0]?.message?.content);
+console.log('🔍 OPENAI RESPONSE - raw content:', response.choices?.[0]?.message?.content || 'NO_CONTENT');
+const content = response.choices[0].message.content?.trim() || 'NO_CONTENT';
+logger.info('🔍 AI RESPONSE - Length:', content.length);
+logger.info('🔍 AI RESPONSE - First 500 chars:', content.substring(0, 500));
       const responseTime = Date.now() - startTime;
 
       logger.debug(`AI response length: ${content.length} characters (${responseTime}ms)`);
