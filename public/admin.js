@@ -717,121 +717,6 @@ setTimeout(() => {
   setupPromptActionListeners();
 }
 
-
-  let tableHTML = `
-    <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <h3 style="margin: 0;">AI Parsing Prompts (${prompts.length})</h3>
-        <p style="margin: 5px 0 0 0; color: #6c757d;">Manage AI prompts for email parsing and classification</p>
-      </div>
-      <button class="btn-admin" data-action="show-modal" data-modal="createPromptModal">
-        <strong>+</strong> New Prompt
-      </button>
-    </div>
-  `;
-
-  // Create tabbed interface for different categories
-  const categories = Object.keys(promptsByCategory).sort();
-  if (categories.length > 1) {
-    tableHTML += `
-      <div class="tab-navigation" style="margin-bottom: 20px;">
-        ${categories.map((category, index) => `
-          <button class="tab-button ${index === 0 ? 'active' : ''}" 
-                  data-category="${category}" 
-                  onclick="switchPromptCategory('${category}')">
-            ${category.charAt(0).toUpperCase() + category.slice(1)} 
-            (${promptsByCategory[category].length})
-          </button>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  // Create tables for each category
-  categories.forEach((category, index) => {
-    const isVisible = index === 0 ? '' : 'style="display: none;"';
-    tableHTML += `
-      <div class="prompt-category-section" data-category="${category}" ${isVisible}>
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Version</th>
-              <th>Status</th>
-              <th>Usage</th>
-              <th>Success Rate</th>
-              <th>Last Updated</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${promptsByCategory[category].map(prompt => `
-              <tr class="prompt-row" data-prompt-id="${prompt.id}">
-                <td>
-                  <div>
-                    <code style="font-weight: bold;">${prompt.name}</code>
-                    ${prompt.testGroup ? `<span class="badge badge-info">Test: ${prompt.testGroup}</span>` : ''}
-                  </div>
-                </td>
-                <td>
-                  <span class="type-badge type-${prompt.type}">${prompt.type}</span>
-                </td>
-                <td>v${prompt.version}</td>
-                <td>
-                  <span class="status-badge ${prompt.isActive ? 'status-active' : 'status-inactive'}">
-                    ${prompt.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td>${prompt.usageCount || 0} uses</td>
-                <td>
-                  ${prompt.successRate !== null ? 
-                    `<span class="success-rate ${getSuccessRateClass(prompt.successRate)}">${(prompt.successRate * 100).toFixed(1)}%</span>` : 
-                    '<span style="color: #6c757d;">No data</span>'
-                  }
-                </td>
-                <td>${formatDate(prompt.updatedAt)}</td>
-                <td class="actions-cell">
-                  <div class="action-buttons">
-                    <button class="btn-admin btn-small" 
-                            data-action="edit-prompt" 
-                            data-id="${prompt.id}"
-                            title="Edit Prompt">
-                      ✏️ Edit
-                    </button>
-                    <button class="btn-admin btn-small ${prompt.isActive ? 'secondary' : 'primary'}" 
-                            data-action="toggle-prompt" 
-                            data-id="${prompt.id}" 
-                            data-active="${!prompt.isActive}"
-                            title="${prompt.isActive ? 'Deactivate' : 'Activate'} Prompt">
-                      ${prompt.isActive ? '⏸️ Deactivate' : '▶️ Activate'}
-                    </button>
-                    <button class="btn-admin btn-small secondary" 
-                            data-action="duplicate-prompt" 
-                            data-id="${prompt.id}"
-                            title="Duplicate Prompt">
-                      📋 Duplicate
-                    </button>
-                    <button class="btn-admin btn-small danger" 
-                            data-action="delete-prompt" 
-                            data-id="${prompt.id}"
-                            title="Delete Prompt">
-                      🗑️ Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  });
-  
-  container.innerHTML = tableHTML;
-  setupPromptActionListeners();
-
-
 // Helper functions for display
 function getSuccessRateClass(rate) {
   if (rate >= 0.9) return 'success-high';
@@ -2768,9 +2653,8 @@ function displayEnhancedSystemStatus(systemStatus, promptAnalytics) {
 }
 
 // =====================================================================
-// CONSOLIDATED INITIALIZATION - REPLACE YOUR EXISTING DOMCONTENTLOADED SECTIONS
+// CONSOLIDATED INITIALIZATION - ENHANCED VERSION
 // =====================================================================
-
 document.addEventListener('DOMContentLoaded', () => {
   console.log('🚀 Initializing enhanced admin system...');
   
@@ -2819,7 +2703,28 @@ document.addEventListener('DOMContentLoaded', () => {
   setupDynamicClickHandlers();
   
   // =================================================================
-  // 5. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
+  // 5. ENHANCED INTEGRATION FEATURES
+  // =================================================================
+  
+  // Wait for existing admin system to load, then add enhanced features
+  setTimeout(() => {
+    // Override existing functions with enhanced versions
+    if (window.loadPrompts) {
+      const originalLoadPrompts = window.loadPrompts;
+      window.loadPrompts = async function() {
+        await originalLoadPrompts();
+        addPromptsSearchAndFilter();
+      };
+    }
+    
+    // Replace form handlers with enhanced versions
+    setupEnhancedPromptFormHandlers();
+    
+    console.log('✅ Enhanced AI Prompts system fully integrated');
+  }, 500);
+  
+  // =================================================================
+  // 6. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
   // =================================================================
   if (window.location.hash === '#admin') {
     const adminButton = document.querySelector('[data-tab="admin"]');

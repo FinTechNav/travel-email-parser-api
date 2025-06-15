@@ -226,34 +226,6 @@ router.put('/segment-types/:name', async (req, res) => {
 });
 
 
-// PUT /api/admin/segment-types/:name - Update segment type
-router.put('/segment-types/:name', async (req, res) => {
-  try {
-    const { name } = req.params;
-    const { displayName, description, isActive, defaultTimezone } = req.body;
-
-    const result = await prisma.$executeRaw`
-      UPDATE segment_type_configs 
-      SET display_name = ${displayName}, 
-          description = ${description}, 
-          is_active = ${isActive}, 
-          default_timezone = ${defaultTimezone},
-          updated_at = CURRENT_TIMESTAMP
-      WHERE name = ${name}
-      RETURNING *
-    `;
-
-    if (result === 0) {
-      return res.status(404).json({ error: 'Segment type not found' });
-    }
-
-    res.json({ message: 'Segment type updated successfully' });
-  } catch (error) {
-    console.error('Error updating segment type:', error);
-    res.status(500).json({ error: 'Failed to update segment type' });
-  }
-});
-
 // =====================================================================
 // CLASSIFICATION RULES MANAGEMENT
 // =====================================================================
@@ -268,10 +240,16 @@ router.post('/segment-types/:name/classification-rules', async (req, res) => {
       return res.status(400).json({ error: 'Rule name and pattern are required' });
     }
 
-    await prisma.$executeRaw`
-      INSERT INTO classification_rules (name, segment_type_name, pattern, type, priority, is_active)
-      VALUES (${ruleName}, ${name}, ${pattern}, ${type}, ${priority}, ${isActive})
-    `;
+const rule = await prisma.classificationRule.create({
+  data: {
+    name: ruleName,
+    segmentTypeName: name,
+    pattern,
+    type,
+    priority,
+    isActive
+  }
+});
 
     res.status(201).json({ message: 'Classification rule created successfully' });
   } catch (error) {
@@ -287,43 +265,6 @@ router.post('/segment-types/:name/classification-rules', async (req, res) => {
   }
 });
 
-// PUT /api/admin/classification-rules/:id
-router.put('/classification-rules/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { pattern, type, priority, isActive } = req.body;
-
-    const rule = await prisma.classificationRule.update({
-      where: { id: parseInt(id) },
-      data: {
-        pattern,
-        type,
-        priority,
-        isActive
-      }
-    });
-
-    res.json({ 
-      message: 'Classification rule updated successfully',
-      rule: {
-        id: rule.id,
-        name: rule.name,
-        pattern: rule.pattern,
-        type: rule.type,
-        priority: rule.priority,
-        is_active: rule.isActive
-      }
-    });
-  } catch (error) {
-    console.error('Error updating classification rule:', error);
-    
-    if (error.code === 'P2025') {
-      res.status(404).json({ error: 'Classification rule not found' });
-    } else {
-      res.status(500).json({ error: 'Failed to update classification rule' });
-    }
-  }
-});
 
 // DELETE /api/admin/classification-rules/:id
 router.delete('/classification-rules/:id', async (req, res) => {
@@ -346,106 +287,6 @@ router.delete('/classification-rules/:id', async (req, res) => {
   }
 });
 
-// =====================================================================
-// PROMPT TEMPLATE MANAGEMENT
-// =====================================================================
-
-// GET /api/admin/prompts
-router.get('/prompts', async (req, res) => {
-  try {
-    const prompts = await prisma.promptTemplate.findMany({
-      orderBy: [
-        { category: 'asc' },
-        { type: 'asc' },
-        { version: 'desc' }
-      ]
-    });
-
-    res.json(prompts);
-  } catch (error) {
-    console.error('Error fetching prompts:', error);
-    res.status(500).json({ error: 'Failed to fetch prompts' });
-  }
-});
-
-// POST /api/admin/prompts
-router.post('/prompts', async (req, res) => {
-  try {
-    const { name, category, type, prompt, version = 1, isActive = true } = req.body;
-
-    if (!name || !category || !type || !prompt) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: name, category, type, prompt' 
-      });
-    }
-
-    // Deactivate other versions if this is being set as active
-    if (isActive) {
-      await prisma.promptTemplate.updateMany({
-        where: { name, isActive: true },
-        data: { isActive: false }
-      });
-    }
-
-    const promptTemplate = await prisma.promptTemplate.create({
-      data: {
-        name,
-        category,
-        type,
-        version,
-        isActive,
-        prompt
-      }
-    });
-
-    res.status(201).json({ 
-      message: 'Prompt template created successfully',
-      promptTemplate
-    });
-  } catch (error) {
-    console.error('Error creating prompt:', error);
-    res.status(500).json({ error: 'Failed to create prompt template' });
-  }
-});
-
-// PUT /api/admin/prompts/:id
-router.put('/prompts/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { prompt, isActive, version } = req.body;
-
-    // If setting this prompt as active, deactivate others with same name
-    if (isActive) {
-      const currentPrompt = await prisma.promptTemplate.findUnique({
-        where: { id: parseInt(id) }
-      });
-      
-      if (currentPrompt) {
-        await prisma.promptTemplate.updateMany({
-          where: { 
-            name: currentPrompt.name, 
-            isActive: true,
-            id: { not: parseInt(id) }
-          },
-          data: { isActive: false }
-        });
-      }
-    }
-
-    const updatedPrompt = await prisma.promptTemplate.update({
-      where: { id: parseInt(id) },
-      data: { prompt, isActive, version }
-    });
-
-    res.json({ 
-      message: 'Prompt template updated successfully',
-      promptTemplate: updatedPrompt
-    });
-  } catch (error) {
-    console.error('Error updating prompt:', error);
-    res.status(500).json({ error: 'Failed to update prompt template' });
-  }
-});
 
 // =====================================================================
 // TIMEZONE RULES MANAGEMENT
@@ -461,10 +302,14 @@ router.post('/segment-types/:name/timezone-rules', async (req, res) => {
       return res.status(400).json({ error: 'Location pattern and timezone are required' });
     }
 
-    await prisma.$executeRaw`
-      INSERT INTO timezone_rules (segment_type_name, location_pattern, timezone, priority)
-      VALUES (${name}, ${locationPattern}, ${timezone}, ${priority})
-    `;
+    const timezoneRule = await prisma.timezoneRule.create({
+      data: {
+        segmentTypeName: name,
+        locationPattern,
+        timezone,
+        priority
+      }
+    });
 
     res.status(201).json({ message: 'Timezone rule created successfully' });
   } catch (error) {
@@ -491,7 +336,7 @@ router.post('/reprocess-segments', async (req, res) => {
     }
 
     // Find segments to reprocess
-    const segments = await prisma.Segment.findMany({
+    const segments = await prisma.segment.findMany({
       where: whereClause,
       include: { email: true }
     });
@@ -501,7 +346,7 @@ router.post('/reprocess-segments', async (req, res) => {
     for (const segment of segments) {
       try {
         // Mark as reprocessed - actual reprocessing would use email processor
-        const updated = await prisma.Segment.update({
+        const updated = await prisma.segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -537,7 +382,7 @@ router.post('/reprocess-segments', async (req, res) => {
 router.post('/quick-fixes/ps-timezone', async (req, res) => {
   try {
     // Fix PS timezone issues specifically
-    const psSegments = await prisma.Segment.findMany({
+    const psSegments = await prisma.segment.findMany({
       where: { type: 'private_terminal' }
     });
 
@@ -557,7 +402,7 @@ router.post('/quick-fixes/ps-timezone', async (req, res) => {
         }
 
         // Update times with correct timezone
-        const updated = await prisma.Segment.update({
+        const updated = await prisma.segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -620,25 +465,7 @@ router.put('/classification-rules/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/v1/admin/classification-rules/:id - Delete classification rule
-router.delete('/classification-rules/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    await prisma.classificationRule.delete({
-      where: { id: parseInt(id) }
-    });
-
-    res.json({ message: 'Classification rule deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting classification rule:', error);
-    if (error.code === 'P2025') {
-      res.status(404).json({ error: 'Classification rule not found' });
-    } else {
-      res.status(500).json({ error: 'Failed to delete classification rule' });
-    }
-  }
-});
 
 // POST /api/v1/admin/classification-rules - Create classification rule
 
@@ -858,7 +685,7 @@ router.get('/system-status', async (req, res) => {
 router.post('/reprocess-segments', async (req, res) => {
   try {
     // Get all segments that need reprocessing
-    const segments = await prisma.Segment.findMany({
+    const segments = await prisma.segment.findMany({
       take: 100, // Limit to prevent overwhelming the system
       orderBy: { parsedAt: 'desc' }
     });
@@ -870,7 +697,7 @@ router.post('/reprocess-segments', async (req, res) => {
     for (const segment of segments) {
       try {
         // Mark for reprocessing by updating a flag
-        await prisma.Segment.update({
+        await prisma.segment.update({
           where: { id: segment.id },
           data: {
             details: {
@@ -1061,7 +888,7 @@ router.get('/prompts/:id', async (req, res) => {
     const { id } = req.params;
     
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: id },
+      where: { id: parseInt(id) },
       include: {
         usage: {
           take: 10,
@@ -1087,7 +914,7 @@ router.post('/prompts/:id/duplicate', async (req, res) => {
     const { id } = req.params;
     
     const originalPrompt = await prisma.promptTemplate.findUnique({
-      where: { id: id }
+      where: { id: parseInt(id) }
     });
 
     if (!originalPrompt) {
@@ -1138,7 +965,7 @@ router.delete('/prompts/:id', async (req, res) => {
     
     // Check if prompt exists
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: id },
+      where: { id: parseInt(id) },
       include: {
         usage: true
       }
@@ -1169,7 +996,7 @@ router.delete('/prompts/:id', async (req, res) => {
 
     // Delete the prompt template
     await prisma.promptTemplate.delete({
-      where: { id: id }
+      where: { id: parseInt(id) }
     });
 
     res.json({ 
@@ -1294,7 +1121,7 @@ router.put('/prompts/:id/activate', async (req, res) => {
     const { id } = req.params;
     
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: id }
+      where: { id: parseInt(id) }
     });
 
     if (!prompt) {
@@ -1312,7 +1139,7 @@ router.put('/prompts/:id/activate', async (req, res) => {
 
     // Activate this version
     const updatedPrompt = await prisma.promptTemplate.update({
-      where: { id: id },
+      where: { id: parseInt(id) },
       data: { isActive: true }
     });
 
@@ -1365,7 +1192,7 @@ router.post('/prompts/test', async (req, res) => {
       // Record test usage
       await prisma.promptUsage.create({
         data: {
-          templateId: promptId,
+          templateId: parseInt(promptId),
           emailType: 'test',
           success: true,
           responseTime,
@@ -1389,7 +1216,7 @@ router.post('/prompts/test', async (req, res) => {
       // Record failed test
       await prisma.promptUsage.create({
         data: {
-          templateId: promptId,
+          templateId: parseInt(promptId),
           emailType: 'test',
           success: false,
           errorMessage: aiError.message,
