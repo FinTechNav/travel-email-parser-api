@@ -2,6 +2,7 @@
 // CSP-COMPLIANT ADMIN PANEL JAVASCRIPT - COMPLETE VERSION
 // =====================================================================
 
+
 // Prevent multiple initialization
 if (window.adminSystemInitialized) {
   console.log('Admin system already initialized, skipping...');
@@ -2748,7 +2749,44 @@ document.addEventListener('DOMContentLoaded', () => {
       adminButton.click();
     }
   }
-  
+  // =================================================================
+// 🔧 FIX: PROMPT TAB SWITCHING EVENT DELEGATION
+// =================================================================
+
+// Dedicated event listener for prompt category switching with debugging
+document.addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-action') === 'switch-prompt-category') {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent other handlers from interfering
+    
+    const category = e.target.getAttribute('data-category');
+    console.log('🔄 Switching to prompt category:', category);
+    
+    // Hide all prompt category sections
+    document.querySelectorAll('.prompt-category-section').forEach(section => {
+      section.style.display = 'none';
+    });
+    
+    // Show the selected category section
+    const targetSection = document.querySelector(`.prompt-category-section[data-category="${category}"]`);
+    if (targetSection) {
+      targetSection.style.display = 'block';
+      console.log('✅ Showing section for category:', category);
+    } else {
+      console.error('❌ Could not find section for category:', category);
+    }
+    
+    // Update tab button states
+    document.querySelectorAll('[data-action="switch-prompt-category"]').forEach(button => {
+      button.classList.remove('active');
+    });
+    e.target.classList.add('active');
+    
+    console.log('🎯 Tab switching complete for category:', category);
+  }
+}, true); // Use capture phase to ensure this runs first
+
+console.log('✅ Enhanced admin system fully initialized');
   console.log('✅ Enhanced admin system fully initialized');
 });
 
