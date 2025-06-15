@@ -1047,4 +1047,584 @@ router.post('/test-classification', async (req, res) => {
     res.status(500).json({ error: 'Failed to test classification' });
   }
 });
+
+// Enhanced Admin Prompts API Endpoints
+// Add these routes to your existing src/routes/admin.js file
+
+// =====================================================================
+// ENHANCED PROMPT TEMPLATE MANAGEMENT API
+// =====================================================================
+
+// GET /api/v1/admin/prompts/:id - Get single prompt
+router.get('/prompts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const prompt = await prisma.promptTemplate.findUnique({
+      where: { id: id },
+      include: {
+        usage: {
+          take: 10,
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!prompt) {
+      return res.status(404).json({ error: 'Prompt template not found' });
+    }
+
+    res.json(prompt);
+  } catch (error) {
+    console.error('Error fetching prompt:', error);
+    res.status(500).json({ error: 'Failed to fetch prompt template' });
+  }
+});
+
+// POST /api/v1/admin/prompts/:id/duplicate - Duplicate prompt
+router.post('/prompts/:id/duplicate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const originalPrompt = await prisma.promptTemplate.findUnique({
+      where: { id: id }
+    });
+
+    if (!originalPrompt) {
+      return res.status(404).json({ error: 'Original prompt not found' });
+    }
+
+    // Create duplicate with incremented version and inactive status
+    const duplicatePrompt = await prisma.promptTemplate.create({
+      data: {
+        name: `${originalPrompt.name}_copy`,
+        category: originalPrompt.category,
+        type: originalPrompt.type,
+        version: originalPrompt.version + 1,
+        prompt: originalPrompt.prompt,
+        variables: originalPrompt.variables,
+        isActive: false, // Duplicates start inactive
+        metadata: {
+          ...originalPrompt.metadata,
+          duplicatedFrom: originalPrompt.id,
+          duplicatedAt: new Date().toISOString()
+        },
+        testGroup: originalPrompt.testGroup,
+        segmentTypeName: originalPrompt.segmentTypeName
+      }
+    });
+
+    res.status(201).json({ 
+      message: 'Prompt duplicated successfully',
+      promptTemplate: duplicatePrompt
+    });
+  } catch (error) {
+    console.error('Error duplicating prompt:', error);
+    
+    if (error.code === 'P2002') {
+      res.status(400).json({ 
+        error: 'A prompt with this name already exists. Try a different name.' 
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to duplicate prompt template' });
+    }
+  }
+});
+
+// DELETE /api/v1/admin/prompts/:id - Delete prompt
+router.delete('/prompts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if prompt exists
+    const prompt = await prisma.promptTemplate.findUnique({
+      where: { id: id },
+      include: {
+        usage: true
+      }
+    });
+
+    if (!prompt) {
+      return res.status(404).json({ error: 'Prompt template not found' });
+    }
+
+    // Check if this is the only active prompt of its type
+    const activePrompts = await prisma.promptTemplate.findMany({
+      where: {
+        name: prompt.name,
+        isActive: true
+      }
+    });
+
+    if (activePrompts.length === 1 && activePrompts[0].id === id) {
+      return res.status(400).json({ 
+        error: 'Cannot delete the only active prompt of this type. Please activate another version first.' 
+      });
+    }
+
+    // Delete related usage records first (if you want to preserve them, skip this)
+    await prisma.promptUsage.deleteMany({
+      where: { templateId: id }
+    });
+
+    // Delete the prompt template
+    await prisma.promptTemplate.delete({
+      where: { id: id }
+    });
+
+    res.json({ 
+      message: 'Prompt template deleted successfully',
+      deletedPrompt: prompt.name
+    });
+  } catch (error) {
+    console.error('Error deleting prompt:', error);
+    
+    if (error.code === 'P2025') {
+      res.status(404).json({ error: 'Prompt template not found' });
+    } else {
+      res.status(500).json({ error: 'Failed to delete prompt template' });
+    }
+  }
+});
+
+// GET /api/v1/admin/prompts/analytics - Get prompt analytics
+router.get('/prompts/analytics', async (req, res) => {
+  try {
+    const { timeframe = '7d', promptId } = req.query;
+    
+    // Calculate date range
+    const now = new Date();
+    const daysBack = timeframe === '30d' ? 30 : timeframe === '1d' ? 1 : 7;
+    const startDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+    
+    const whereClause = {
+      createdAt: {
+        gte: startDate
+      }
+    };
+    
+    if (promptId) {
+      whereClause.templateId = promptId;
+    }
+
+    // Get usage statistics
+    const [totalUsage, successfulUsage, avgResponseTime, tokenUsage] = await Promise.all([
+      prisma.promptUsage.count({ where: whereClause }),
+      prisma.promptUsage.count({ 
+        where: { ...whereClause, success: true } 
+      }),
+      prisma.promptUsage.aggregate({
+        where: whereClause,
+        _avg: { responseTime: true }
+      }),
+      prisma.promptUsage.aggregate({
+        where: whereClause,
+        _sum: { tokenUsage: true }
+      })
+    ]);
+
+    // Get usage by day for charts
+    const dailyUsage = await prisma.promptUsage.groupBy({
+      by: ['createdAt'],
+      where: whereClause,
+      _count: { id: true },
+      _sum: { tokenUsage: true },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Get top performing prompts
+    const topPrompts = await prisma.promptTemplate.findMany({
+      where: {
+        usage: {
+          some: {
+            createdAt: {
+              gte: startDate
+            }
+          }
+        }
+      },
+      include: {
+        usage: {
+          where: {
+            createdAt: {
+              gte: startDate
+            }
+          }
+        }
+      },
+      orderBy: {
+        successRate: 'desc'
+      },
+      take: 10
+    });
+
+    const analytics = {
+      summary: {
+        totalUsage,
+        successRate: totalUsage > 0 ? (successfulUsage / totalUsage) : 0,
+        avgResponseTime: avgResponseTime._avg.responseTime || 0,
+        totalTokens: tokenUsage._sum.tokenUsage || 0
+      },
+      dailyUsage: dailyUsage.map(day => ({
+        date: day.createdAt.toISOString().split('T')[0],
+        usage: day._count.id,
+        tokens: day._sum.tokenUsage || 0
+      })),
+      topPrompts: topPrompts.map(prompt => ({
+        id: prompt.id,
+        name: prompt.name,
+        usageCount: prompt.usage.length,
+        successRate: prompt.successRate || 0,
+        avgResponseTime: prompt.usage.length > 0 
+          ? prompt.usage.reduce((sum, u) => sum + u.responseTime, 0) / prompt.usage.length 
+          : 0
+      }))
+    };
+
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching prompt analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch prompt analytics' });
+  }
+});
+
+// PUT /api/v1/admin/prompts/:id/activate - Activate specific prompt version
+router.put('/prompts/:id/activate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const prompt = await prisma.promptTemplate.findUnique({
+      where: { id: id }
+    });
+
+    if (!prompt) {
+      return res.status(404).json({ error: 'Prompt template not found' });
+    }
+
+    // Deactivate all other versions of this prompt
+    await prisma.promptTemplate.updateMany({
+      where: { 
+        name: prompt.name,
+        id: { not: id }
+      },
+      data: { isActive: false }
+    });
+
+    // Activate this version
+    const updatedPrompt = await prisma.promptTemplate.update({
+      where: { id: id },
+      data: { isActive: true }
+    });
+
+    res.json({ 
+      message: `Prompt "${prompt.name}" v${prompt.version} activated successfully`,
+      promptTemplate: updatedPrompt
+    });
+  } catch (error) {
+    console.error('Error activating prompt:', error);
+    res.status(500).json({ error: 'Failed to activate prompt template' });
+  }
+});
+
+// POST /api/v1/admin/prompts/test - Test prompt with sample data
+router.post('/prompts/test', async (req, res) => {
+  try {
+    const { promptId, testData } = req.body;
+    
+    if (!promptId || !testData) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: promptId and testData' 
+      });
+    }
+
+    const prompt = await prisma.promptTemplate.findUnique({
+      where: { id: promptId }
+    });
+
+    if (!prompt) {
+      return res.status(404).json({ error: 'Prompt template not found' });
+    }
+
+    // Import your AI service
+    const { parseEmailWithOpenAI } = require('../services/openaiService');
+    
+    // Replace variables in prompt
+    let filledPrompt = prompt.prompt;
+    Object.keys(testData).forEach(key => {
+      const placeholder = `{{${key}}}`;
+      filledPrompt = filledPrompt.replace(new RegExp(placeholder, 'g'), testData[key]);
+    });
+
+    const startTime = Date.now();
+    
+    try {
+      // Test the prompt with OpenAI
+      const result = await parseEmailWithOpenAI(filledPrompt);
+      const responseTime = Date.now() - startTime;
+      
+      // Record test usage
+      await prisma.promptUsage.create({
+        data: {
+          templateId: promptId,
+          emailType: 'test',
+          success: true,
+          responseTime,
+          tokenUsage: null // OpenAI doesn't always return token count
+        }
+      });
+
+      res.json({
+        success: true,
+        result,
+        metadata: {
+          responseTime,
+          promptLength: filledPrompt.length,
+          promptPreview: filledPrompt.substring(0, 200) + (filledPrompt.length > 200 ? '...' : '')
+        }
+      });
+      
+    } catch (aiError) {
+      const responseTime = Date.now() - startTime;
+      
+      // Record failed test
+      await prisma.promptUsage.create({
+        data: {
+          templateId: promptId,
+          emailType: 'test',
+          success: false,
+          errorMessage: aiError.message,
+          responseTime
+        }
+      });
+
+      res.status(400).json({
+        success: false,
+        error: aiError.message,
+        metadata: {
+          responseTime,
+          promptLength: filledPrompt.length
+        }
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error testing prompt:', error);
+    res.status(500).json({ error: 'Failed to test prompt' });
+  }
+});
+
+// GET /api/v1/admin/prompts/categories - Get available prompt categories
+router.get('/prompts/categories', async (req, res) => {
+  try {
+    const categories = await prisma.promptTemplate.groupBy({
+      by: ['category'],
+      _count: { category: true },
+      orderBy: { category: 'asc' }
+    });
+
+    const result = categories.map(cat => ({
+      name: cat.category,
+      count: cat._count.category
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching prompt categories:', error);
+    res.status(500).json({ error: 'Failed to fetch prompt categories' });
+  }
+});
+
+// GET /api/v1/admin/prompts/types - Get available prompt types
+router.get('/prompts/types', async (req, res) => {
+  try {
+    const types = await prisma.promptTemplate.groupBy({
+      by: ['type'],
+      _count: { type: true },
+      orderBy: { type: 'asc' }
+    });
+
+    const result = types.map(type => ({
+      name: type.type,
+      count: type._count.type
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching prompt types:', error);
+    res.status(500).json({ error: 'Failed to fetch prompt types' });
+  }
+});
+
+// POST /api/v1/admin/prompts/bulk-update - Bulk update prompts
+router.post('/prompts/bulk-update', async (req, res) => {
+  try {
+    const { promptIds, updates } = req.body;
+    
+    if (!Array.isArray(promptIds) || promptIds.length === 0) {
+      return res.status(400).json({ error: 'promptIds must be a non-empty array' });
+    }
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'updates object cannot be empty' });
+    }
+
+    // Validate that only allowed fields are being updated
+    const allowedFields = ['isActive', 'testGroup', 'metadata'];
+    const updateFields = Object.keys(updates);
+    const invalidFields = updateFields.filter(field => !allowedFields.includes(field));
+    
+    if (invalidFields.length > 0) {
+      return res.status(400).json({ 
+        error: `Invalid update fields: ${invalidFields.join(', ')}. Allowed: ${allowedFields.join(', ')}` 
+      });
+    }
+
+    const result = await prisma.promptTemplate.updateMany({
+      where: {
+        id: { in: promptIds }
+      },
+      data: updates
+    });
+
+    res.json({ 
+      message: `Successfully updated ${result.count} prompt templates`,
+      updatedCount: result.count
+    });
+    
+  } catch (error) {
+    console.error('Error bulk updating prompts:', error);
+    res.status(500).json({ error: 'Failed to bulk update prompts' });
+  }
+});
+
+// =====================================================================
+// PROMPT TEMPLATE IMPORT/EXPORT
+// =====================================================================
+
+// GET /api/v1/admin/prompts/export - Export prompts
+router.get('/prompts/export', async (req, res) => {
+  try {
+    const { category, type, activeOnly } = req.query;
+    
+    const whereClause = {};
+    if (category) whereClause.category = category;
+    if (type) whereClause.type = type;
+    if (activeOnly === 'true') whereClause.isActive = true;
+
+    const prompts = await prisma.promptTemplate.findMany({
+      where: whereClause,
+      orderBy: [
+        { category: 'asc' },
+        { type: 'asc' },
+        { name: 'asc' },
+        { version: 'desc' }
+      ]
+    });
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      prompts: prompts.map(prompt => ({
+        name: prompt.name,
+        category: prompt.category,
+        type: prompt.type,
+        version: prompt.version,
+        prompt: prompt.prompt,
+        variables: prompt.variables,
+        isActive: prompt.isActive,
+        testGroup: prompt.testGroup,
+        metadata: prompt.metadata
+      }))
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="prompts-export.json"');
+    res.json(exportData);
+    
+  } catch (error) {
+    console.error('Error exporting prompts:', error);
+    res.status(500).json({ error: 'Failed to export prompts' });
+  }
+});
+
+// POST /api/v1/admin/prompts/import - Import prompts
+router.post('/prompts/import', async (req, res) => {
+  try {
+    const { prompts, overwriteExisting = false } = req.body;
+    
+    if (!Array.isArray(prompts) || prompts.length === 0) {
+      return res.status(400).json({ error: 'prompts must be a non-empty array' });
+    }
+
+    const results = {
+      imported: 0,
+      skipped: 0,
+      errors: []
+    };
+
+    for (const promptData of prompts) {
+      try {
+        // Check if prompt already exists
+        const existing = await prisma.promptTemplate.findFirst({
+          where: {
+            name: promptData.name,
+            version: promptData.version
+          }
+        });
+
+        if (existing && !overwriteExisting) {
+          results.skipped++;
+          continue;
+        }
+
+        if (existing && overwriteExisting) {
+          // Update existing prompt
+          await prisma.promptTemplate.update({
+            where: { id: existing.id },
+            data: {
+              prompt: promptData.prompt,
+              variables: promptData.variables,
+              isActive: promptData.isActive,
+              testGroup: promptData.testGroup,
+              metadata: promptData.metadata
+            }
+          });
+        } else {
+          // Create new prompt
+          await prisma.promptTemplate.create({
+            data: {
+              name: promptData.name,
+              category: promptData.category,
+              type: promptData.type,
+              version: promptData.version,
+              prompt: promptData.prompt,
+              variables: promptData.variables,
+              isActive: promptData.isActive || false,
+              testGroup: promptData.testGroup,
+              metadata: promptData.metadata
+            }
+          });
+        }
+
+        results.imported++;
+        
+      } catch (error) {
+        results.errors.push({
+          prompt: promptData.name,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      message: `Import completed: ${results.imported} imported, ${results.skipped} skipped`,
+      results
+    });
+    
+  } catch (error) {
+    console.error('Error importing prompts:', error);
+    res.status(500).json({ error: 'Failed to import prompts' });
+  }
+});
+
 module.exports = router;
