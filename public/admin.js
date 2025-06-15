@@ -123,18 +123,30 @@ function createInlineModals() {
 }
 
 function showModal(modalId) {
+  console.log(`🔄 Showing modal: ${modalId}`);
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.style.display = 'flex';
+    // Add modal to stack for proper layering
+    if (!window.openModals) window.openModals = [];
+    window.openModals.push(modalId);
+  } else {
+    console.error(`❌ Modal not found: ${modalId}`);
   }
 }
 
 function hideModal(modalId) {
+  console.log(`🔄 Hiding modal: ${modalId}`);
   const modal = document.getElementById(modalId);
   if (modal) {
     modal.style.display = 'none';
+    // Remove from modal stack
+    if (window.openModals) {
+      window.openModals = window.openModals.filter(id => id !== modalId);
+    }
   }
 }
+
 
 // =====================================================================
 // EVENT LISTENERS SETUP
@@ -331,8 +343,18 @@ function loadSystemStatus() {
 // ADMIN ACTION HANDLERS
 // =====================================================================
 
+function setupTabEventListeners() {
+  document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', function(e) {
+      const tabName = this.getAttribute('data-tab');
+      if (tabName) {
+        showTab(tabName, this);
+      }
+    });
+  });
+}
+
 function setupAdminActionListeners() {
-  // Handle all admin action buttons
   document.querySelectorAll('[data-action]').forEach(button => {
     button.addEventListener('click', function(e) {
       e.preventDefault();
@@ -357,17 +379,29 @@ function setupAdminActionListeners() {
         case 'load-prompts':
           loadPrompts();
           break;
+        case 'check-system-status':
+          checkSystemStatus();
+          break;
         case 'fix-ps-timezone':
           fixPSTimezone();
           break;
         case 'reprocess-all-segments':
           reprocessAllSegments();
           break;
-        case 'check-system-status':
-          checkSystemStatus();
-          break;
         case 'test-classification-rules':
           showModal('testClassificationModal');
+          break;
+        case 'show-prompts-help':
+          showPromptsHelp();
+          break;
+        case 'clear-prompts-filters':
+          clearPromptsFilters();
+          break;
+        case 'export-prompts':
+          exportPrompts();
+          break;
+        case 'show-import-modal':
+          showImportModal();
           break;
         case 'hide-modal':
           const modalId = this.getAttribute('data-modal');
@@ -869,7 +903,7 @@ async function deletePrompt(promptId) {
   if (!confirm('Are you sure you want to delete this prompt? This action cannot be undone.')) {
     return;
   }
-
+  
   try {
     const response = await fetch(`/api/v1/admin/prompts/${promptId}`, {
       method: 'DELETE'
@@ -879,11 +913,36 @@ async function deletePrompt(promptId) {
       showAlert('success', 'Prompt deleted successfully');
       loadPrompts(); // Refresh the list
     } else {
-      throw new Error('Failed to delete prompt');
+      const error = await response.json();
+      showAlert('danger', error.error || 'Failed to delete prompt');
     }
   } catch (error) {
     console.error('Error deleting prompt:', error);
     showAlert('danger', 'Failed to delete prompt');
+  }
+}
+
+async function deletePromptsBulk(promptIds) {
+  try {
+    showAlert('info', `Deleting ${promptIds.length} prompts...`);
+    
+    const promises = promptIds.map(id => 
+      fetch(`/api/v1/admin/prompts/${id}`, { method: 'DELETE' })
+    );
+    
+    const results = await Promise.all(promises);
+    const successCount = results.filter(r => r.ok).length;
+    
+    if (successCount === promptIds.length) {
+      showAlert('success', `${successCount} prompts deleted successfully`);
+    } else {
+      showAlert('warning', `${successCount}/${promptIds.length} prompts deleted successfully`);
+    }
+    
+    loadPrompts(); // Refresh the table
+    clearSelection();
+  } catch (error) {
+    showAlert('danger', `Failed to delete prompts: ${error.message}`);
   }
 }
 
@@ -1322,6 +1381,186 @@ function addPromptStyles() {
         font-size: 13px;
         line-height: 1.4;
       }
+        /* Admin Alert Styles - ADD THIS INSIDE YOUR EXISTING <style> TAG */
+.admin-alert {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  min-width: 300px;
+  padding: 15px;
+  border-radius: 5px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alert-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+/* System Status Styles */
+.system-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.status-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-card h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.status-metrics {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.metric {
+  text-align: center;
+}
+
+.metric .value {
+  display: block;
+  font-size: 24px;
+  font-weight: bold;
+  color: #007bff;
+}
+
+.metric .label {
+  font-size: 12px;
+  color: #6c757d;
+  text-transform: uppercase;
+}
+
+.status-indicator {
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.status-indicator.healthy {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-indicator.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-indicator.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.actions-card .action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.recent-activity {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.activity-item {
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Search and Filter Styles */
+.prompts-search-filter {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  padding: 15px;
+  margin: 20px 0;
+}
+
+.search-row {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-group input {
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  width: 300px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-group select {
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  min-width: 120px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.metric-card {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+}
+
+.metric-card h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #007bff;
+}
     </style>
   `;
   
@@ -1333,39 +1572,47 @@ function addPromptStyles() {
 // =====================================================================
 
 function setupTableActionListeners() {
-  // Handle all table action buttons
-  document.querySelectorAll('[data-action^="edit-"], [data-action^="delete-"], [data-action^="toggle-"]').forEach(button => {
-    button.addEventListener('click', function(e) {
-      e.preventDefault();
-      const action = this.getAttribute('data-action');
-      const id = this.getAttribute('data-id');
-      const name = this.getAttribute('data-name');
-      const active = this.getAttribute('data-active') === 'true';
-      
-      switch(action) {
-        case 'edit-segment-type':
-          editSegmentType(name);
-          break;
-        case 'toggle-segment-type':
-          toggleSegmentType(name, active);
-          break;
-        case 'edit-rule':
-          editRule(id);
-          break;
-        case 'delete-rule':
-          deleteRule(id);
-          break;
-        case 'edit-prompt':
-          editPrompt(id);
-          break;
-        case 'toggle-prompt':
-          togglePrompt(id, active);
-          break;
-      }
-    });
+  // Handle all table action buttons with event delegation
+  document.addEventListener('click', function(e) {
+    const target = e.target;
+    const action = target.getAttribute('data-action');
+    
+    if (!action) return;
+    
+    e.preventDefault();
+    
+    const id = target.getAttribute('data-id');
+    const name = target.getAttribute('data-name');
+    const active = target.getAttribute('data-active') === 'true';
+    
+    switch(action) {
+      case 'edit-segment-type':
+        editSegmentType(name);
+        break;
+      case 'toggle-segment-type':
+        toggleSegmentType(name, active);
+        break;
+      case 'edit-rule':
+        editRule(id);
+        break;
+      case 'delete-rule':
+        deleteRule(id);
+        break;
+      case 'edit-prompt':
+        editPrompt(id);
+        break;
+      case 'toggle-prompt':
+        togglePrompt(id, active);
+        break;
+      case 'duplicate-prompt':
+        duplicatePrompt(id);
+        break;
+      case 'delete-prompt':
+        deletePrompt(id);
+        break;
+    }
   });
 }
-
 // =====================================================================
 // SYSTEM ACTIONS
 // =====================================================================
@@ -1373,13 +1620,14 @@ function setupTableActionListeners() {
 async function fixPSTimezone() {
   try {
     showAlert('info', 'Fixing PS timezone issues...');
-    const response = await fetch('/api/admin/fix-ps-timezone', { method: 'POST' });
-    const result = await response.json();
+    const response = await fetch('/api/v1/admin/fix-ps-timezone', { method: 'POST' });
     
     if (response.ok) {
-      showAlert('success', `✅ Fixed ${result.updatedCount} PS segments`);
+      const result = await response.json();
+      showAlert('success', `✅ Fixed ${result.updatedCount || 0} PS segments`);
     } else {
-      showAlert('danger', result.error || 'Failed to fix PS timezone issues');
+      const error = await response.json();
+      showAlert('danger', error.error || 'Failed to fix PS timezone issues');
     }
   } catch (error) {
     showAlert('danger', 'Could not connect to admin system');
@@ -1387,17 +1635,18 @@ async function fixPSTimezone() {
 }
 
 async function reprocessAllSegments() {
-  if (!confirm('This will reprocess ALL travel segments. Are you sure?')) return;
+  if (!confirm('This will reprocess ALL travel segments with current rules. This may take several minutes. Are you sure?')) return;
   
   try {
     showAlert('info', 'Starting segment reprocessing...');
-    const response = await fetch('/api/admin/reprocess-segments', { method: 'POST' });
-    const result = await response.json();
+    const response = await fetch('/api/v1/admin/reprocess-segments', { method: 'POST' });
     
     if (response.ok) {
-      showAlert('success', `✅ Reprocessing started for ${result.segmentCount} segments`);
+      const result = await response.json();
+      showAlert('success', `✅ Reprocessing started for ${result.segmentCount || 0} segments`);
     } else {
-      showAlert('danger', result.error || 'Failed to start reprocessing');
+      const error = await response.json();
+      showAlert('danger', error.error || 'Failed to start reprocessing');
     }
   } catch (error) {
     showAlert('danger', 'Could not connect to admin system');
@@ -1436,25 +1685,34 @@ async function checkSystemStatus() {
   }
 }
 
+
+
 // =====================================================================
 // UTILITY FUNCTIONS
 // =====================================================================
 
-function showAlert(type, message) {
-  const alert = document.createElement('div');
-  alert.className = `alert alert-${type}`;
-  alert.textContent = message;
+// Enhanced alert system
+function showAlert(type, message, duration = 5000) {
+  // Remove existing alerts
+  document.querySelectorAll('.admin-alert').forEach(alert => alert.remove());
   
-  const container = document.querySelector('.admin-panel');
-  if (container) {
-    container.insertBefore(alert, container.firstChild);
-    
-    setTimeout(() => {
-      if (alert.parentNode) {
-        alert.remove();
-      }
-    }, 5000);
-  }
+  const alertDiv = document.createElement('div');
+  alertDiv.className = `admin-alert alert alert-${type}`;
+  alertDiv.innerHTML = `
+    <span>${message}</span>
+    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+  `;
+  
+  // Add to page
+  const container = document.querySelector('.admin-panel') || document.body;
+  container.insertBefore(alertDiv, container.firstChild);
+  
+  // Auto-remove after duration
+  setTimeout(() => {
+    if (alertDiv.parentElement) {
+      alertDiv.remove();
+    }
+  }, duration);
 }
 
 // =====================================================================
@@ -1597,41 +1855,60 @@ async function toggleSegmentType(name, active) {
 // =====================================================================
 
 function showEditSegmentTypeModal(segmentType) {
+
+  const existingModal = document.getElementById('editSegmentTypeModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
   const modalHTML = `
     <div class="modal" id="editSegmentTypeModal" style="display: flex;">
       <div class="modal-backdrop" data-action="hide-modal" data-modal="editSegmentTypeModal"></div>
-      <div class="modal-content">
+      <div class="modal-content large-modal">
         <div class="modal-header">
           <h3>Edit Segment Type: ${segmentType.name}</h3>
           <button class="modal-close" data-action="hide-modal" data-modal="editSegmentTypeModal">&times;</button>
         </div>
         <div class="modal-body">
           <form id="editSegmentTypeForm">
+            <input type="hidden" name="originalName" value="${segmentType.name}">
+            
             <div class="form-group">
-              <label for="editDisplayName">Display Name:</label>
-              <input type="text" id="editDisplayName" name="displayName" value="${segmentType.display_name || segmentType.displayName || ''}" required>
+              <label for="editDisplayName">Display Name *</label>
+              <input type="text" id="editDisplayName" name="displayName" 
+                     value="${segmentType.display_name || segmentType.displayName || ''}" required>
             </div>
+            
             <div class="form-group">
-              <label for="editDescription">Description:</label>
+              <label for="editDescription">Description</label>
               <textarea id="editDescription" name="description" rows="3">${segmentType.description || ''}</textarea>
             </div>
+            
             <div class="form-group">
-              <label for="editDefaultTimezone">Default Timezone:</label>
+              <label for="editDefaultTimezone">Default Timezone</label>
               <select id="editDefaultTimezone" name="defaultTimezone">
-                <option value="America/New_York" ${(segmentType.default_timezone === 'America/New_York') ? 'selected' : ''}>Eastern</option>
-                <option value="America/Chicago" ${(segmentType.default_timezone === 'America/Chicago') ? 'selected' : ''}>Central</option>
-                <option value="America/Denver" ${(segmentType.default_timezone === 'America/Denver') ? 'selected' : ''}>Mountain</option>
-                <option value="America/Los_Angeles" ${(segmentType.default_timezone === 'America/Los_Angeles') ? 'selected' : ''}>Pacific</option>
+                <option value="America/New_York" ${(segmentType.default_timezone === 'America/New_York') ? 'selected' : ''}>Eastern Time</option>
+                <option value="America/Chicago" ${(segmentType.default_timezone === 'America/Chicago') ? 'selected' : ''}>Central Time</option>
+                <option value="America/Denver" ${(segmentType.default_timezone === 'America/Denver') ? 'selected' : ''}>Mountain Time</option>
+                <option value="America/Los_Angeles" ${(segmentType.default_timezone === 'America/Los_Angeles') ? 'selected' : ''}>Pacific Time</option>
+                <option value="UTC" ${(segmentType.default_timezone === 'UTC') ? 'selected' : ''}>UTC</option>
               </select>
             </div>
+            
             <div class="form-group">
               <label>
-                <input type="checkbox" name="isActive" ${segmentType.is_active ? 'checked' : ''}> Active
+                <input type="checkbox" name="isActive" ${segmentType.is_active ? 'checked' : ''}> 
+                Active
               </label>
             </div>
-            <div class="form-actions">
-              <button type="submit" class="btn-admin success">Save Changes</button>
-              <button type="button" class="btn-admin secondary" data-action="hide-modal" data-modal="editSegmentTypeModal">Cancel</button>
+
+            <div class="modal-actions">
+              <button type="button" data-action="hide-modal" data-modal="editSegmentTypeModal" class="btn-admin secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-admin primary">
+                Update Segment Type
+              </button>
             </div>
           </form>
         </div>
@@ -1639,10 +1916,6 @@ function showEditSegmentTypeModal(segmentType) {
     </div>
   `;
 
-  // Remove existing modal and add new one
-  const existingModal = document.getElementById('editSegmentTypeModal');
-  if (existingModal) existingModal.remove();
-  
   document.body.insertAdjacentHTML('beforeend', modalHTML);
   
   // Setup form submission
@@ -1650,6 +1923,7 @@ function showEditSegmentTypeModal(segmentType) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
+    const originalName = formData.get('originalName');
     const data = {
       displayName: formData.get('displayName'),
       description: formData.get('description'),
@@ -1658,7 +1932,7 @@ function showEditSegmentTypeModal(segmentType) {
     };
 
     try {
-      const response = await fetch(`/api/v1/admin/segment-types/${segmentType.name}`, {
+      const response = await fetch(`/api/v1/admin/segment-types/${originalName}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -1677,7 +1951,6 @@ function showEditSegmentTypeModal(segmentType) {
     }
   });
   
-  // Setup close handlers
   setupModalCloseHandlers('editSegmentTypeModal');
 }
 
@@ -2196,69 +2469,72 @@ function addPromptsHelpButton() {
 }
 
 function showPromptsHelp() {
-  const helpContent = `
-    <div class="help-content">
-      <h4>AI Prompts Management Help</h4>
-      
-      <h5>Quick Actions:</h5>
-      <ul>
-        <li><kbd>Ctrl+N</kbd> - Create new prompt</li>
-        <li><kbd>Ctrl+T</kbd> - Test a prompt</li>
-        <li><kbd>Ctrl+E</kbd> - Export prompts</li>
-        <li><kbd>Ctrl+I</kbd> - Import prompts</li>
-        <li><kbd>Esc</kbd> - Close modals</li>
-      </ul>
-      
-      <h5>Prompt Variables:</h5>
-      <ul>
-        <li><code>{{emailContent}}</code> - Full email text</li>
-        <li><code>{{extractedTimes}}</code> - Pre-extracted time information</li>
-        <li><code>{{senderEmail}}</code> - Sender's email address</li>
-        <li><code>{{subject}}</code> - Email subject line</li>
-      </ul>
-      
-      <h5>Best Practices:</h5>
-      <ul>
-        <li>Use descriptive names in snake_case format</li>
-        <li>Include specific instructions for your use case</li>
-        <li>Test prompts before activating them</li>
-        <li>Use version numbers for tracking changes</li>
-        <li>Set test groups for A/B testing</li>
-      </ul>
-      
-      <h5>Troubleshooting:</h5>
-      <ul>
-        <li>Low success rate? Check prompt clarity and examples</li>
-        <li>Slow response times? Consider shortening prompts</li>
-        <li>Inconsistent results? Add more specific constraints</li>
-      </ul>
-    </div>
-  `;
-  
-  // Create help modal
-  const helpModal = `
+  // Remove existing help modal
+  const existingModal = document.getElementById('helpModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  const helpHTML = `
     <div id="helpModal" class="modal" style="display: flex;">
       <div class="modal-backdrop" data-action="close-help-modal"></div>
-      <div class="modal-content">
+      <div class="modal-content large-modal">
         <div class="modal-header">
-          <h3>Help & Documentation</h3>
+          <h3>AI Prompts Help</h3>
           <button class="modal-close" data-action="close-help-modal">&times;</button>
         </div>
         <div class="modal-body">
-          ${helpContent}
+          <h4>🤖 About AI Prompts</h4>
+          <p>AI Prompts control how the system extracts travel information from emails. Each prompt is a set of instructions for the AI to follow when parsing email content.</p>
+          
+          <h4>📝 Prompt Types</h4>
+          <ul>
+            <li><strong>Base Prompts:</strong> Core parsing instructions</li>
+            <li><strong>Override Prompts:</strong> Replace base prompts for specific cases</li>
+            <li><strong>Enhancement Prompts:</strong> Add additional extraction rules</li>
+          </ul>
+          
+          <h4>🏷️ Categories</h4>
+          <ul>
+            <li><strong>Parsing:</strong> Extract travel details from emails</li>
+            <li><strong>Classification:</strong> Determine email types</li>
+            <li><strong>Enhancement:</strong> Add context or corrections</li>
+          </ul>
+          
+          <h4>🔧 Variables Available</h4>
+          <p>Use these variables in your prompts:</p>
+          <ul>
+            <li><code>{{emailContent}}</code> - Full email body</li>
+            <li><code>{{senderEmail}}</code> - Email sender address</li>
+            <li><code>{{subject}}</code> - Email subject line</li>
+            <li><code>{{extractedTimes}}</code> - Pre-extracted time information</li>
+          </ul>
+          
+          <h4>⚡ Best Practices</h4>
+          <ul>
+            <li>Use specific, clear instructions</li>
+            <li>Test prompts before activating</li>
+            <li>Only one version per name can be active</li>
+            <li>Higher version numbers take precedence</li>
+          </ul>
         </div>
         <div class="modal-actions">
-          <button class="btn-admin" data-action="close-help-modal">
-            Close
-          </button>
+          <button class="btn-admin primary" data-action="close-help-modal">Got it!</button>
         </div>
       </div>
     </div>
   `;
-  
-  document.body.insertAdjacentHTML('beforeend', helpModal);
-}
 
+  document.body.insertAdjacentHTML('beforeend', helpHTML);
+  
+  // Setup close handlers
+  document.querySelectorAll('[data-action="close-help-modal"]').forEach(element => {
+    element.addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById('helpModal').remove();
+    });
+  });
+}
 
 // =====================================================================
 // SEARCH AND FILTERING
@@ -2424,13 +2700,76 @@ function updateFilterResultCount(count) {
 }
 
 function clearPromptsFilters() {
-  document.getElementById('promptSearch').value = '';
-  document.getElementById('categoryFilter').value = '';
-  document.getElementById('typeFilter').value = '';
-  document.getElementById('statusFilter').value = '';
-  filterPrompts();
+  // Clear all filter inputs
+  const searchInput = document.getElementById('promptSearch');
+  const categoryFilter = document.getElementById('categoryFilter');
+  const typeFilter = document.getElementById('typeFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  
+  if (searchInput) searchInput.value = '';
+  if (categoryFilter) categoryFilter.value = '';
+  if (typeFilter) typeFilter.value = '';
+  if (statusFilter) statusFilter.value = '';
+  
+  // Show all prompt rows
+  document.querySelectorAll('.prompt-row').forEach(row => {
+    row.style.display = '';
+  });
+  
+  // Update result count
+  const promptRows = document.querySelectorAll('.prompt-row');
+  updateFilterResultCount(promptRows.length);
+  
+  showAlert('info', 'Filters cleared');
 }
 
+// =====================================================================
+// 6. MISSING PROMPT ANALYTICS FUNCTIONS
+// =====================================================================
+
+async function loadPromptAnalytics() {
+  // Guard against multiple calls
+  if (window.promptAnalyticsSetup) return;
+  window.promptAnalyticsSetup = true;
+  
+  try {
+    const response = await fetch('/api/v1/admin/prompts/analytics?timeframe=7d');
+    if (response.ok) {
+      const analytics = await response.json();
+      displayPromptAnalytics(analytics);
+    }
+  } catch (error) {
+    console.log('Prompt analytics not available yet');
+  }
+  
+  console.log('Prompt analytics setup complete');
+}
+
+function displayPromptAnalytics(analytics) {
+  const container = document.getElementById('promptAnalytics');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="analytics-grid">
+      <div class="metric-card">
+        <h4>Total Prompts</h4>
+        <div class="metric-value">${analytics.totalPrompts || 0}</div>
+      </div>
+      <div class="metric-card">
+        <h4>Active Prompts</h4>
+        <div class="metric-value">${analytics.activePrompts || 0}</div>
+      </div>
+      <div class="metric-card">
+        <h4>Usage (7 days)</h4>
+        <div class="metric-value">${analytics.weeklyUsage || 0}</div>
+      </div>
+      <div class="metric-card">
+        <h4>Success Rate</h4>
+        <div class="metric-value">${analytics.successRate || 0}%</div>
+      </div>
+    </div>
+  `;
+}
 // =====================================================================
 // ENHANCED FORM VALIDATION AND UX
 // =====================================================================
@@ -2584,28 +2923,207 @@ function exportPrompts() {
 }
 
 function showImportModal() {
-  showAlert('info', 'Import functionality not yet implemented');
+  const modalHTML = `
+    <div id="importModal" class="modal" style="display: flex;">
+      <div class="modal-backdrop" data-action="hide-modal" data-modal="importModal"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Import Prompts</h3>
+          <button class="modal-close" data-action="hide-modal" data-modal="importModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="importForm">
+            <div class="form-group">
+              <label for="importFile">Select JSON file:</label>
+              <input type="file" id="importFile" accept=".json" required>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" name="overwriteExisting"> 
+                Overwrite existing prompts with same name
+              </label>
+            </div>
+          </form>
+        </div>
+        <div class="modal-actions">
+          <button type="button" data-action="hide-modal" data-modal="importModal" class="btn-admin secondary">Cancel</button>
+          <button type="button" onclick="processImport()" class="btn-admin primary">Import</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  setupModalCloseHandlers('importModal');
 }
 
+async function exportPrompts() {
+  try {
+    const response = await fetch('/api/v1/admin/prompts');
+    if (!response.ok) throw new Error('Failed to fetch prompts');
+    
+    const prompts = await response.json();
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      prompts: prompts
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prompts-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showAlert('success', 'Prompts exported successfully');
+  } catch (error) {
+    showAlert('danger', 'Failed to export prompts');
+  }
+}
+
+async function processImport() {
+  const fileInput = document.getElementById('importFile');
+  const overwrite = document.querySelector('input[name="overwriteExisting"]').checked;
+  
+  if (!fileInput.files[0]) {
+    showAlert('warning', 'Please select a file to import');
+    return;
+  }
+  
+  try {
+    const text = await fileInput.files[0].text();
+    const data = JSON.parse(text);
+    
+    if (!data.prompts || !Array.isArray(data.prompts)) {
+      throw new Error('Invalid file format');
+    }
+    
+    showAlert('info', `Importing ${data.prompts.length} prompts...`);
+    
+    const results = await Promise.all(
+      data.prompts.map(prompt => 
+        fetch('/api/v1/admin/prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(prompt)
+        })
+      )
+    );
+    
+    const successCount = results.filter(r => r.ok).length;
+    hideModal('importModal');
+    
+    if (successCount === data.prompts.length) {
+      showAlert('success', `All ${successCount} prompts imported successfully`);
+    } else {
+      showAlert('warning', `${successCount}/${data.prompts.length} prompts imported successfully`);
+    }
+    
+    loadPrompts();
+  } catch (error) {
+    showAlert('danger', `Import failed: ${error.message}`);
+  }
+}
 // Bulk operation stubs
+
 function bulkActivatePrompts() {
-  showAlert('info', 'Bulk activate not yet implemented');
+  const selectedPrompts = getSelectedPrompts();
+  if (selectedPrompts.length === 0) {
+    showAlert('warning', 'Please select prompts to activate');
+    return;
+  }
+  
+  if (!confirm(`Activate ${selectedPrompts.length} selected prompts?`)) return;
+  
+  updatePromptsBulk(selectedPrompts, { isActive: true }, 'activated');
 }
 
 function bulkDeactivatePrompts() {
-  showAlert('info', 'Bulk deactivate not yet implemented');
+  const selectedPrompts = getSelectedPrompts();
+  if (selectedPrompts.length === 0) {
+    showAlert('warning', 'Please select prompts to deactivate');
+    return;
+  }
+  
+  if (!confirm(`Deactivate ${selectedPrompts.length} selected prompts?`)) return;
+  
+  updatePromptsBulk(selectedPrompts, { isActive: false }, 'deactivated');
 }
 
 function bulkSetTestGroup() {
-  showAlert('info', 'Bulk test group not yet implemented');
+  const selectedPrompts = getSelectedPrompts();
+  if (selectedPrompts.length === 0) {
+    showAlert('warning', 'Please select prompts to update');
+    return;
+  }
+  
+  const testGroup = prompt('Enter test group name:');
+  if (!testGroup) return;
+  
+  updatePromptsBulk(selectedPrompts, { testGroup }, `test group set to "${testGroup}"`);
 }
 
 function bulkDeletePrompts() {
-  showAlert('info', 'Bulk delete not yet implemented');
+  const selectedPrompts = getSelectedPrompts();
+  if (selectedPrompts.length === 0) {
+    showAlert('warning', 'Please select prompts to delete');
+    return;
+  }
+  
+  if (!confirm(`DELETE ${selectedPrompts.length} selected prompts? This cannot be undone!`)) return;
+  
+  deletePromptsBulk(selectedPrompts);
 }
 
+function getSelectedPrompts() {
+  const checkboxes = document.querySelectorAll('input[name="selectedPrompts"]:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
+
+async function updatePromptsBulk(promptIds, updateData, action) {
+  try {
+    showAlert('info', `Updating ${promptIds.length} prompts...`);
+    
+    const promises = promptIds.map(id => 
+      fetch(`/api/v1/admin/prompts/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      })
+    );
+    
+    const results = await Promise.all(promises);
+    const successCount = results.filter(r => r.ok).length;
+    
+    if (successCount === promptIds.length) {
+      showAlert('success', `${successCount} prompts ${action} successfully`);
+    } else {
+      showAlert('warning', `${successCount}/${promptIds.length} prompts ${action} successfully`);
+    }
+    
+    loadPrompts(); // Refresh the table
+    clearSelection();
+  } catch (error) {
+    showAlert('danger', `Failed to update prompts: ${error.message}`);
+  }
+}
+
+
 function clearSelection() {
-  console.log('Clear selection');
+  document.querySelectorAll('input[name="selectedPrompts"]').forEach(cb => {
+    cb.checked = false;
+  });
+  
+  // Hide bulk operations toolbar if it exists
+  const bulkToolbar = document.getElementById('bulkOperationsToolbar');
+  if (bulkToolbar) {
+    bulkToolbar.style.display = 'none';
+  }
 }
 
 function clearPromptsFilters() {
@@ -2744,43 +3262,65 @@ function displayEnhancedSystemStatus(systemStatus, promptAnalytics) {
 // =====================================================================
 // CONSOLIDATED INITIALIZATION - ENHANCED VERSION
 // =====================================================================
+// =====================================================================
+// CONSOLIDATED INITIALIZATION - CLEAN VERSION
+// Assumes all functions are already implemented elsewhere in the file
+// =====================================================================
+
+// =====================================================================
+// COMPLETE DOMCONTENTLOADED SECTION - COPY/PASTE THIS ENTIRE SECTION
+// =====================================================================
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 Initializing enhanced admin system...');
+  // Prevent multiple initialization
+  if (window.adminSystemInitialized) {
+    console.log('Admin system already initialized, skipping...');
+    return;
+  }
+  window.adminSystemInitialized = true;
+  
+  console.log('🚀 Initializing complete enhanced admin system...');
   
   // =================================================================
-  // 1. EXISTING TAB NAVIGATION SETUP
+  // 1. ADD CSS STYLES FIRST
+  // =================================================================
+  addPromptStyles();
+  
+  // =================================================================
+  // 2. SETUP TAB NAVIGATION
   // =================================================================
   document.querySelectorAll('.tab-button').forEach(button => {
     button.addEventListener('click', function(e) {
       const tabName = this.getAttribute('data-tab');
-      showTab(tabName, this);
+      if (tabName) {
+        showTab(tabName, this);
+      }
     });
   });
   
   // =================================================================
-  // 2. EXISTING ADMIN ACTION LISTENERS
+  // 3. SETUP ADMIN ACTION LISTENERS
   // =================================================================
   setupAdminActionListeners();
   
   // =================================================================
-  // 3. EXISTING MODAL MANAGEMENT
+  // 4. SETUP TABLE ACTION LISTENERS (CONSOLIDATED)
   // =================================================================
-  createWorkingModals(); // Your existing function
+  setupTableActionListeners();
   
   // =================================================================
-  // 4. NEW AI PROMPTS ENHANCEMENTS
+  // 5. CREATE WORKING MODALS
   // =================================================================
+  createWorkingModals();
   
-  // Add prompt-specific styles
-  addEnhancedPromptStyles();
+  // =================================================================
+  // 6. SETUP FORM HANDLERS
+  // =================================================================
+  setupFormEventListeners();
+  setupPromptFormHandlers();
   
-  // Add prompt modals to the DOM
-  const modalContainer = document.querySelector('#modals-container') || document.body;
-  modalContainer.insertAdjacentHTML('beforeend', createPromptModals());
-  modalContainer.insertAdjacentHTML('beforeend', createPromptTestModal());
-  
-  // Setup enhanced form handlers (includes your existing + new prompt handlers)
-  setupEnhancedFormHandlers();
+  // =================================================================
+  // 7. SETUP ENHANCED FEATURES
+  // =================================================================
   
   // Setup keyboard shortcuts for power users
   setupKeyboardShortcuts();
@@ -2788,11 +3328,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add help button
   addPromptsHelpButton();
   
-  // Setup dynamic click handling for new features
-  setupDynamicClickHandlers();
+  // Add prompt modals to the DOM
+  const modalContainer = document.querySelector('#modals-container') || document.body;
+  modalContainer.insertAdjacentHTML('beforeend', createPromptModals());
+  modalContainer.insertAdjacentHTML('beforeend', createPromptTestModal());
   
   // =================================================================
-  // 5. ENHANCED INTEGRATION FEATURES
+  // 8. ENHANCED INTEGRATION FEATURES
   // =================================================================
   
   // Wait for existing admin system to load, then add enhanced features
@@ -2802,18 +3344,112 @@ document.addEventListener('DOMContentLoaded', () => {
       const originalLoadPrompts = window.loadPrompts;
       window.loadPrompts = async function() {
         await originalLoadPrompts();
-        addPromptsSearchAndFilter();
+        // Add search and filter after prompts are loaded
+        setTimeout(() => {
+          if (!window.promptSearchLoaded) {
+            addPromptsSearchAndFilter();
+            window.promptSearchLoaded = true;
+          }
+        }, 100);
       };
     }
     
-    // Replace form handlers with enhanced versions
+    // Setup enhanced prompt form handlers
     setupEnhancedPromptFormHandlers();
     
     console.log('✅ Enhanced AI Prompts system fully integrated');
   }, 500);
   
   // =================================================================
-  // 6. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
+  // 9. PROMPT TAB SWITCHING EVENT DELEGATION
+  // =================================================================
+  
+  document.addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-action') === 'switch-prompt-category') {
+      e.preventDefault();
+      e.stopPropagation(); // Prevent other handlers from interfering
+      
+      const category = e.target.getAttribute('data-category');
+      console.log('🔄 Switching to prompt category:', category);
+      
+      // Hide all prompt category sections
+      document.querySelectorAll('.prompt-category-section').forEach(section => {
+        section.style.display = 'none';
+      });
+      
+      // Show the selected category section
+      const targetSection = document.querySelector(`.prompt-category-section[data-category="${category}"]`);
+      if (targetSection) {
+        targetSection.style.display = 'block';
+        console.log('✅ Showing section for category:', category);
+      } else {
+        console.error('❌ Could not find section for category:', category);
+      }
+      
+      // Update tab button states
+      document.querySelectorAll('[data-action="switch-prompt-category"]').forEach(button => {
+        button.classList.remove('active');
+      });
+      e.target.classList.add('active');
+      
+      console.log('🎯 Tab switching complete for category:', category);
+    }
+  }, true); // Use capture phase to ensure this runs first
+  
+  // =================================================================
+  // 10. ENHANCED DEBUG EDIT PROMPT LISTENER
+  // =================================================================
+  
+  document.addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-action') === 'edit-prompt') {
+      console.log('🔍 Edit button clicked!');
+      const promptId = e.target.getAttribute('data-id');
+      console.log('🔍 Prompt ID from button:', promptId);
+      
+      const editPromptWithDebug = async (id) => {
+        try {
+          console.log('🔄 Attempting to fetch prompt with ID:', id);
+          const response = await fetch(`/api/v1/admin/prompts/${id}`);
+          console.log('🔍 Response status:', response.status);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ API Error Response:', errorText);
+            showAlert('danger', `Failed to load prompt: ${response.status} - ${errorText}`);
+            return;
+          }
+          
+          const prompt = await response.json();
+          console.log('✅ Prompt data received:', prompt);
+          
+          console.log('🔄 Checking if edit modal exists...');
+          const editModal = document.getElementById('editPromptModal');
+          console.log('🔍 Edit modal element:', editModal);
+          
+          if (!editModal) {
+            console.log('⚠️ Edit modal not found! Creating it now...');
+            createEditPromptModal();
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+          console.log('🔄 Attempting to populate modal...');
+          populatePromptEditModal(prompt);
+          
+          console.log('🔄 Attempting to show edit modal...');
+          showModal('editPromptModal');
+          
+        } catch (error) {
+          console.error('❌ Error in editPrompt:', error);
+          showAlert('danger', 'Failed to load prompt data for editing');
+        }
+      };
+      
+      editPromptWithDebug(promptId);
+    }
+  }, true);
+  
+  // =================================================================
+  // 11. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
   // =================================================================
   if (window.location.hash === '#admin') {
     const adminButton = document.querySelector('[data-tab="admin"]');
@@ -2821,127 +3457,9 @@ document.addEventListener('DOMContentLoaded', () => {
       adminButton.click();
     }
   }
-  // =================================================================
-// 🔧 FIX: PROMPT TAB SWITCHING EVENT DELEGATION
-// =================================================================
-
-// Dedicated event listener for prompt category switching with debugging
-document.addEventListener('click', function(e) {
-  if (e.target.getAttribute('data-action') === 'switch-prompt-category') {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent other handlers from interfering
-    
-    const category = e.target.getAttribute('data-category');
-    console.log('🔄 Switching to prompt category:', category);
-    
-    // Hide all prompt category sections
-    document.querySelectorAll('.prompt-category-section').forEach(section => {
-      section.style.display = 'none';
-    });
-    
-    // Show the selected category section
-    const targetSection = document.querySelector(`.prompt-category-section[data-category="${category}"]`);
-    if (targetSection) {
-      targetSection.style.display = 'block';
-      console.log('✅ Showing section for category:', category);
-    } else {
-      console.error('❌ Could not find section for category:', category);
-    }
-    
-    // Update tab button states
-    document.querySelectorAll('[data-action="switch-prompt-category"]').forEach(button => {
-      button.classList.remove('active');
-    });
-    e.target.classList.add('active');
-    
-    console.log('🎯 Tab switching complete for category:', category);
-  }
-}, true); // Use capture phase to ensure this runs first
-
-// =================================================================
-// 🔧 ENHANCED DEBUG: CHECK FOR MISSING MODAL ELEMENTS
-// =================================================================
-
-// Replace your enhanced debugging code with this improved version:
-document.addEventListener('click', function(e) {
-  if (e.target.getAttribute('data-action') === 'edit-prompt') {
-    console.log('🔍 Edit button clicked!');
-    const promptId = e.target.getAttribute('data-id');
-    console.log('🔍 Prompt ID from button:', promptId);
-    
-    // Enhanced editPrompt function with debugging
-    const editPromptWithDebug = async (id) => {
-      try {
-        console.log('🔄 Attempting to fetch prompt with ID:', id);
-        const response = await fetch(`/api/v1/admin/prompts/${id}`);
-        console.log('🔍 Response status:', response.status);
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ API Error Response:', errorText);
-          showAlert('danger', `Failed to load prompt: ${response.status} - ${errorText}`);
-          return;
-        }
-        
-        const prompt = await response.json();
-        console.log('✅ Prompt data received:', prompt);
-        
-        // 🔍 CHECK IF MODAL EXISTS BEFORE POPULATING
-        console.log('🔄 Checking if edit modal exists...');
-        const editModal = document.getElementById('editPromptModal');
-        console.log('🔍 Edit modal element:', editModal);
-        
-        if (!editModal) {
-          console.log('⚠️ Edit modal not found! Creating it now...');
-          createEditPromptModal();
-          
-          // Wait a moment for DOM to update
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          const newModal = document.getElementById('editPromptModal');
-          console.log('🔍 New modal created:', newModal);
-        }
-        
-        // 🔍 CHECK EACH FORM ELEMENT BEFORE SETTING VALUES
-        console.log('🔄 Checking form elements...');
-        const elements = [
-          'editPromptId',
-          'editPromptName', 
-          'editPromptVersion',
-          'editPromptTestGroup',
-          'editPromptText',
-          'editPromptActive'
-        ];
-        
-        elements.forEach(elementId => {
-          const element = document.getElementById(elementId);
-          console.log(`🔍 ${elementId}:`, element);
-          if (!element) {
-            console.error(`❌ Missing element: ${elementId}`);
-          }
-        });
-        
-        // Try to populate the modal
-        console.log('🔄 Attempting to populate modal...');
-        populatePromptEditModal(prompt);
-        
-        console.log('🔄 Attempting to show edit modal...');
-        showModal('editPromptModal');
-        
-      } catch (error) {
-        console.error('❌ Error in editPrompt:', error);
-        showAlert('danger', 'Failed to load prompt data for editing');
-      }
-    };
-    
-    editPromptWithDebug(promptId);
-  }
-}, true);
-
-  console.log('✅ Enhanced admin system fully initialized');
+  
+  console.log('✅ Complete enhanced admin system fully initialized');
 });
-
-
 
 // =====================================================================
 // ENHANCED FORM HANDLERS - COMBINES EXISTING + NEW FUNCTIONALITY
@@ -2981,19 +3499,34 @@ window.switchTab = function(tabName) {
 
 // Update the main admin initialization
 function initializeAdminSystem() {
-  console.log('🔧 Initializing enhanced admin system...');
+  // Guard against multiple initialization
+  if (window.adminSystemInitialized) {
+    console.log('Admin system already initialized');
+    return;
+  }
+  window.adminSystemInitialized = true;
   
-  // Initialize all admin sections
-  loadSegmentTypes();
-  loadClassificationRules();
-  loadPrompts(); // Add prompts loading
-  loadSystemStatus();
+  console.log('🚀 Initializing enhanced admin system...');
   
-  // Setup enhanced modal handlers
-  setupEnhancedModalHandlers();
+  // Setup all event listeners
+  setupTabEventListeners();
+  setupAdminActionListeners();
+  setupTableActionListeners();
   
-  console.log('✅ Enhanced admin system initialized');
+  // Load initial data
+  setTimeout(() => {
+    if (document.getElementById('admin-tab').classList.contains('active')) {
+      loadSegmentTypes();
+      loadClassificationRules();
+      loadPrompts();
+      checkSystemStatus();
+    }
+  }, 100);
+  
+  console.log('✅ Enhanced admin system fully initialized');
 }
+
+
 
 function setupEnhancedModalHandlers() {
   // Existing modal handlers...
@@ -3117,6 +3650,7 @@ window.refreshSystemStatus = () => checkSystemStatus();
 window.initializeAdminSystem = initializeAdminSystem;
 window.loadSystemStatus = loadSystemStatus;
 window.refreshSystemStatus = () => loadSystemStatus();
+window.processImport = processImport;
 window.testEmailClassification = () => showModal('testClassificationModal');
 window.reprocessFailedSegments = async () => {
   if (confirm('Reprocess all failed segments? This may take some time.')) {
