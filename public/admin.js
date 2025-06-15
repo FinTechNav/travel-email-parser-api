@@ -1036,6 +1036,78 @@ function createPromptModals() {
   `;
 }
 
+// =================================================================
+// 🔧 CREATE EDIT PROMPT MODAL FUNCTION
+// =================================================================
+
+function createEditPromptModal() {
+  // Remove existing modal if it exists
+  const existingModal = document.getElementById('editPromptModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // Create the modal HTML
+  const modalHTML = `
+    <div id="editPromptModal" class="modal" style="display: none;">
+      <div class="modal-backdrop" data-action="hide-modal" data-modal="editPromptModal"></div>
+      <div class="modal-content large-modal">
+        <div class="modal-header">
+          <h3>Edit AI Prompt</h3>
+          <button class="modal-close" data-action="hide-modal" data-modal="editPromptModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="editPromptForm">
+            <input type="hidden" id="editPromptId" name="id">
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="editPromptName">Prompt Name</label>
+                <input type="text" id="editPromptName" name="name" readonly>
+                <small>Name cannot be changed. Create a new prompt if needed.</small>
+              </div>
+              <div class="form-group">
+                <label for="editPromptVersion">Version</label>
+                <input type="number" id="editPromptVersion" name="version" min="1">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="editPromptTestGroup">Test Group</label>
+              <input type="text" id="editPromptTestGroup" name="testGroup">
+            </div>
+            
+            <div class="form-group">
+              <label for="editPromptText">Prompt Text *</label>
+              <textarea id="editPromptText" name="prompt" required rows="15"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="editPromptActive" name="isActive"> 
+                Set as active prompt
+              </label>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" data-action="hide-modal" data-modal="editPromptModal" class="btn-admin secondary">
+                Cancel
+              </button>
+              <button type="submit" class="btn-admin primary">
+                Update Prompt
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Add modal to the page
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  console.log('✅ Edit modal created and added to DOM');
+}
+
 function populatePromptEditModal(prompt) {
   document.getElementById('editPromptId').value = prompt.id;
   document.getElementById('editPromptName').value = prompt.name;
@@ -2786,9 +2858,90 @@ document.addEventListener('click', function(e) {
   }
 }, true); // Use capture phase to ensure this runs first
 
-console.log('✅ Enhanced admin system fully initialized');
+// =================================================================
+// 🔧 ENHANCED DEBUG: CHECK FOR MISSING MODAL ELEMENTS
+// =================================================================
+
+// Replace your enhanced debugging code with this improved version:
+document.addEventListener('click', function(e) {
+  if (e.target.getAttribute('data-action') === 'edit-prompt') {
+    console.log('🔍 Edit button clicked!');
+    const promptId = e.target.getAttribute('data-id');
+    console.log('🔍 Prompt ID from button:', promptId);
+    
+    // Enhanced editPrompt function with debugging
+    const editPromptWithDebug = async (id) => {
+      try {
+        console.log('🔄 Attempting to fetch prompt with ID:', id);
+        const response = await fetch(`/api/v1/admin/prompts/${id}`);
+        console.log('🔍 Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ API Error Response:', errorText);
+          showAlert('danger', `Failed to load prompt: ${response.status} - ${errorText}`);
+          return;
+        }
+        
+        const prompt = await response.json();
+        console.log('✅ Prompt data received:', prompt);
+        
+        // 🔍 CHECK IF MODAL EXISTS BEFORE POPULATING
+        console.log('🔄 Checking if edit modal exists...');
+        const editModal = document.getElementById('editPromptModal');
+        console.log('🔍 Edit modal element:', editModal);
+        
+        if (!editModal) {
+          console.log('⚠️ Edit modal not found! Creating it now...');
+          createEditPromptModal();
+          
+          // Wait a moment for DOM to update
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          const newModal = document.getElementById('editPromptModal');
+          console.log('🔍 New modal created:', newModal);
+        }
+        
+        // 🔍 CHECK EACH FORM ELEMENT BEFORE SETTING VALUES
+        console.log('🔄 Checking form elements...');
+        const elements = [
+          'editPromptId',
+          'editPromptName', 
+          'editPromptVersion',
+          'editPromptTestGroup',
+          'editPromptText',
+          'editPromptActive'
+        ];
+        
+        elements.forEach(elementId => {
+          const element = document.getElementById(elementId);
+          console.log(`🔍 ${elementId}:`, element);
+          if (!element) {
+            console.error(`❌ Missing element: ${elementId}`);
+          }
+        });
+        
+        // Try to populate the modal
+        console.log('🔄 Attempting to populate modal...');
+        populatePromptEditModal(prompt);
+        
+        console.log('🔄 Attempting to show edit modal...');
+        showModal('editPromptModal');
+        
+      } catch (error) {
+        console.error('❌ Error in editPrompt:', error);
+        showAlert('danger', 'Failed to load prompt data for editing');
+      }
+    };
+    
+    editPromptWithDebug(promptId);
+  }
+}, true);
+
   console.log('✅ Enhanced admin system fully initialized');
 });
+
+
 
 // =====================================================================
 // ENHANCED FORM HANDLERS - COMBINES EXISTING + NEW FUNCTIONALITY
