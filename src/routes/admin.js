@@ -272,7 +272,7 @@ router.delete('/classification-rules/:id', async (req, res) => {
     const { id } = req.params;
 
     await prisma.classificationRule.delete({
-      where: { id: parseInt(id) }
+      where: { id: id }
     });
 
     res.json({ message: 'Classification rule deleted successfully' });
@@ -589,7 +589,7 @@ router.put('/prompts/:id', async (req, res) => {
     // If setting this prompt as active, deactivate others with same name
     if (isActive) {
       const currentPrompt = await prisma.promptTemplate.findUnique({
-        where: { id: parseInt(id) }
+        where: { id: id }
       });
       
       if (currentPrompt) {
@@ -597,7 +597,7 @@ router.put('/prompts/:id', async (req, res) => {
           where: { 
             name: currentPrompt.name, 
             isActive: true,
-            id: { not: parseInt(id) }
+            id: { not: id }
           },
           data: { isActive: false }
         });
@@ -605,7 +605,7 @@ router.put('/prompts/:id', async (req, res) => {
     }
 
     const updatedPrompt = await prisma.promptTemplate.update({
-      where: { id: parseInt(id) },
+      where: { id: id },
       data: { prompt, isActive, version }
     });
 
@@ -887,8 +887,12 @@ router.get('/prompts/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'Valid prompt ID is required' });
+    }
+    
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: id },
       include: {
         usage: {
           take: 10,
@@ -914,7 +918,7 @@ router.post('/prompts/:id/duplicate', async (req, res) => {
     const { id } = req.params;
     
     const originalPrompt = await prisma.promptTemplate.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: id }
     });
 
     if (!originalPrompt) {
@@ -965,7 +969,7 @@ router.delete('/prompts/:id', async (req, res) => {
     
     // Check if prompt exists
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: parseInt(id) },
+      where: { id: id },
       include: {
         usage: true
       }
@@ -996,7 +1000,7 @@ router.delete('/prompts/:id', async (req, res) => {
 
     // Delete the prompt template
     await prisma.promptTemplate.delete({
-      where: { id: parseInt(id) }
+      where: { id: id }
     });
 
     res.json({ 
@@ -1121,7 +1125,7 @@ router.put('/prompts/:id/activate', async (req, res) => {
     const { id } = req.params;
     
     const prompt = await prisma.promptTemplate.findUnique({
-      where: { id: parseInt(id) }
+      where: { id: id }
     });
 
     if (!prompt) {
@@ -1139,7 +1143,7 @@ router.put('/prompts/:id/activate', async (req, res) => {
 
     // Activate this version
     const updatedPrompt = await prisma.promptTemplate.update({
-      where: { id: parseInt(id) },
+      where: { id: id },
       data: { isActive: true }
     });
 
@@ -1192,7 +1196,7 @@ router.post('/prompts/test', async (req, res) => {
       // Record test usage
       await prisma.promptUsage.create({
         data: {
-          templateId: parseInt(promptId),
+          templateId: promptId,
           emailType: 'test',
           success: true,
           responseTime,
@@ -1216,7 +1220,7 @@ router.post('/prompts/test', async (req, res) => {
       // Record failed test
       await prisma.promptUsage.create({
         data: {
-          templateId: parseInt(promptId),
+          templateId: promptId,
           emailType: 'test',
           success: false,
           errorMessage: aiError.message,

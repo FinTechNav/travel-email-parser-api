@@ -2,6 +2,13 @@
 // CSP-COMPLIANT ADMIN PANEL JAVASCRIPT - COMPLETE VERSION
 // =====================================================================
 
+// Prevent multiple initialization
+if (window.adminSystemInitialized) {
+  console.log('Admin system already initialized, skipping...');
+} else {
+  window.adminSystemInitialized = true;
+}
+
 // =====================================================================
 // TAB MANAGEMENT
 // =====================================================================
@@ -545,15 +552,19 @@ async function loadPrompts() {
   try {
     const response = await fetch('/api/v1/admin/prompts');
     if (response.ok) {
+
       const prompts = await response.json();
       displayPrompts(prompts);
-      
-      // Add enhanced features after displaying prompts
-      setTimeout(() => {
-        addPromptsSearchAndFilter();
-        addBulkOperations();
-        loadPromptAnalytics();
-      }, 100);
+
+      // Add enhanced features after displaying prompts (only once)
+      if (!window.promptEnhancementsLoaded) {
+        setTimeout(() => {
+          addPromptsSearchAndFilter();
+          addBulkOperations();
+          loadPromptAnalytics();
+          window.promptEnhancementsLoaded = true;
+        }, 100);
+      }
       
     } else {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -593,7 +604,10 @@ function displayPrompts(prompts) {
 
   // Add these lines after displayPrompts:
 setTimeout(() => {
-  addPromptsSearchAndFilter();
+  if (!window.promptSearchLoaded) {
+    addPromptsSearchAndFilter();
+    window.promptSearchLoaded = true;
+  }
 }, 100);
 
   // Group prompts by category for better organization
@@ -621,9 +635,9 @@ setTimeout(() => {
     tableHTML += `
       <div class="tab-navigation" style="margin-bottom: 20px;">
         ${categories.map((category, index) => `
-          <button class="tab-button ${index === 0 ? 'active' : ''}" 
-                  data-category="${category}" 
-                  onclick="switchPromptCategory('${category}')">
+        <button class="tab-button ${index === 0 ? 'active' : ''}" 
+                data-category="${category}" 
+                data-action="switch-prompt-category">
             ${category.charAt(0).toUpperCase() + category.slice(1)} 
             (${promptsByCategory[category].length})
           </button>
@@ -2026,11 +2040,11 @@ function addEnhancedPromptStyles() {
 function createPromptTestModal() {
   return `
     <div id="testPromptModal" class="modal" style="display: none;">
-      <div class="modal-backdrop" onclick="hideModal('testPromptModal')"></div>
+      <div class="modal-backdrop" data-action="hide-modal" data-modal="testPromptModal"></div>
       <div class="modal-content">
         <div class="modal-header">
           <h3>Test AI Prompt</h3>
-          <button class="modal-close" onclick="hideModal('testPromptModal')">&times;</button>
+          <button class="modal-close" data-action="hide-modal" data-modal="testPromptModal">&times;</button>
         </div>
         <div class="modal-body">
           <p>Test prompt functionality - requires full implementation</p>
@@ -2097,7 +2111,7 @@ function setupKeyboardShortcuts() {
 
 function addPromptsHelpButton() {
   const helpHTML = `
-    <button class="btn-admin btn-small secondary help-button" onclick="showPromptsHelp()" 
+    <button class="btn-admin btn-small secondary help-button" data-action="show-prompts-help"
             style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; border-radius: 50%; width: 50px; height: 50px;">
       ❓
     </button>
@@ -2151,17 +2165,17 @@ function showPromptsHelp() {
   // Create help modal
   const helpModal = `
     <div id="helpModal" class="modal" style="display: flex;">
-      <div class="modal-backdrop" onclick="document.getElementById('helpModal').remove()"></div>
+      <div class="modal-backdrop" data-action="close-help-modal"></div>
       <div class="modal-content">
         <div class="modal-header">
           <h3>Help & Documentation</h3>
-          <button class="modal-close" onclick="document.getElementById('helpModal').remove()">&times;</button>
+          <button class="modal-close" data-action="close-help-modal">&times;</button>
         </div>
         <div class="modal-body">
           ${helpContent}
         </div>
         <div class="modal-actions">
-          <button class="btn-admin" onclick="document.getElementById('helpModal').remove()">
+          <button class="btn-admin" data-action="close-help-modal">
             Close
           </button>
         </div>
@@ -2199,7 +2213,7 @@ function addPromptsSearchAndFilter() {
           </select>
         </div>
         <div class="action-group">
-          <button class="btn-admin btn-small secondary" onclick="clearPromptsFilters()">
+          <button class="btn-admin btn-small secondary" data-action="clear-prompts-filters">
             Clear Filters
           </button>
         </div>
@@ -2239,6 +2253,8 @@ function setupPromptsSearchHandlers() {
 }
 
 async function populateFilterOptions() {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
   try {
     const [categoriesResponse, typesResponse] = await Promise.all([
       fetch('/api/v1/admin/prompts/categories'),
@@ -2831,7 +2847,12 @@ function handleDynamicClicks(e) {
       const promptId = target.getAttribute('data-id');
       editPrompt(promptId);
       break;
-      
+    
+    case 'switch-prompt-category':
+      const category = target.getAttribute('data-category');
+      switchPromptCategory(category);
+      break;
+
     case 'toggle-prompt':
       const togglePromptId = target.getAttribute('data-id');
       const newState = target.getAttribute('data-active') === 'true';
@@ -2857,7 +2878,19 @@ function handleDynamicClicks(e) {
       const hideModalId = target.getAttribute('data-modal');
       hideModal(hideModalId);
       break;
-  }
+    
+    case 'show-prompts-help':
+      showPromptsHelp();
+      break;
+
+    case 'close-help-modal':
+      document.getElementById('helpModal').remove();
+      break;
+
+    case 'clear-prompts-filters':
+      clearPromptsFilters();
+      break;
+      }
 }
 
 // =====================================================================
