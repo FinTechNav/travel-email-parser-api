@@ -84,6 +84,14 @@ app.use(
 
 app.use(express.static(path.join(__dirname, '../public')));
 
+// 🔍 ADD THIS DEBUGGING MIDDLEWARE RIGHT HERE (BEFORE API ROUTES):
+app.use('/api/v1/admin', (req, res, next) => {
+  console.log(`🔍 Admin API Call: ${req.method} ${req.originalUrl}`);
+  console.log(`🔍 Full URL: ${req.protocol}://${req.get('host')}${req.originalUrl}`);
+  console.log(`🔍 Timestamp: ${new Date().toISOString()}`);
+  next();
+});
+
 // API routes
 app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
@@ -92,6 +100,18 @@ app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/prompts', promptRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/docs', docsRoutes);
+
+// Add this AFTER your route mounting to debug what routes exist
+app.use('/api/v1/admin', (req, res, next) => {
+  console.log('🚨 Route not found:', req.method, req.originalUrl);
+  console.log('Available admin routes should be mounted');
+  res.status(404).json({ 
+    error: 'Admin route not found',
+    method: req.method,
+    path: req.originalUrl,
+    message: 'Check server console for debugging info'
+  });
+});
 
 // Root endpoint
 app.get('/', (req, res) => {
