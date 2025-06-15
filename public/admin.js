@@ -47,21 +47,6 @@ function showTab(tabName, clickedButton) {
 // MODAL MANAGEMENT
 // =====================================================================
 
-function loadModals() {
-  // Load modals into the container
-  fetch('modals.html')
-    .then(response => response.text())
-    .then(html => {
-      document.getElementById('modals-container').innerHTML = html;
-      setupModalEventListeners();
-    })
-    .catch(error => {
-      console.error('Error loading modals:', error);
-      // Create basic modals HTML inline if fetch fails
-      createInlineModals();
-      setupModalEventListeners();
-    });
-}
 
 function createInlineModals() {
   // If modals.html can't be fetched, create basic modal structure
@@ -151,21 +136,6 @@ function hideModal(modalId) {
 // =====================================================================
 // EVENT LISTENERS SETUP
 // =====================================================================
-
-function setupModalEventListeners() {
-  // Handle all modal hide actions
-  document.querySelectorAll('[data-action="hide-modal"]').forEach(element => {
-    element.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      const modalId = this.getAttribute('data-modal');
-      hideModal(modalId);
-    });
-  });
-
-  // Setup form event listeners if modals exist
-  setupFormEventListeners();
-}
 
 function setupFormEventListeners() {
   // Create Segment Type Form
@@ -637,14 +607,6 @@ function displayPrompts(prompts) {
     return;
   }
 
-  // Add these lines after displayPrompts:
-setTimeout(() => {
-  if (!window.promptSearchLoaded) {
-    addPromptsSearchAndFilter();
-    window.promptSearchLoaded = true;
-  }
-}, 100);
-
   // Group prompts by category for better organization
   const promptsByCategory = prompts.reduce((acc, prompt) => {
     if (!acc[prompt.category]) acc[prompt.category] = [];
@@ -764,9 +726,15 @@ setTimeout(() => {
   
   container.innerHTML = tableHTML;
   setupPromptActionListeners();
+    // Add these lines after displayPrompts:
+setTimeout(() => {
+  if (!window.promptSearchLoaded) {
+    addPromptsSearchAndFilter();
+    window.promptSearchLoaded = true;
+  }
+}, 100);
 }
 
-// Helper functions for display
 function getSuccessRateClass(rate) {
   if (rate >= 0.9) return 'success-high';
   if (rate >= 0.7) return 'success-medium';
@@ -783,6 +751,7 @@ function formatDate(dateString) {
     minute: '2-digit'
   });
 }
+
 
 function switchPromptCategory(category) {
   // Hide all category sections
@@ -1168,32 +1137,35 @@ function createEditPromptModal() {
 }
 
 function populatePromptEditModal(prompt) {
-  document.getElementById('editPromptId').value = prompt.id;
-  document.getElementById('editPromptName').value = prompt.name;
-  document.getElementById('editPromptVersion').value = prompt.version;
-  document.getElementById('editPromptTestGroup').value = prompt.testGroup || '';
-  document.getElementById('editPromptText').value = prompt.prompt;
-  document.getElementById('editPromptActive').checked = prompt.isActive;
+  // Ensure modal exists first
+  const modal = document.getElementById('editPromptModal');
+  if (!modal) {
+    console.error('❌ Edit modal not found in DOM');
+    createEditPromptModal();
+    // Wait for modal creation
+    setTimeout(() => populatePromptEditModal(prompt), 100);
+    return;
+  }
+  
+  // Now populate the fields safely
+  const idField = document.getElementById('editPromptId');
+  const nameField = document.getElementById('editPromptName');
+  const versionField = document.getElementById('editPromptVersion');
+  const testGroupField = document.getElementById('editPromptTestGroup');
+  const textField = document.getElementById('editPromptText');
+  const activeField = document.getElementById('editPromptActive');
+  
+  if (idField) idField.value = prompt.id;
+  if (nameField) nameField.value = prompt.name;
+  if (versionField) versionField.value = prompt.version;
+  if (testGroupField) testGroupField.value = prompt.testGroup || '';
+  if (textField) textField.value = prompt.prompt;
+  if (activeField) activeField.checked = prompt.isActive;
+  
+  console.log('✅ Modal populated with prompt data:', prompt.name);
 }
 
-// Add this function anywhere in your admin.js file:
-function setupPromptActionListeners() {
-  // Setup event listeners for prompt actions
-  document.querySelectorAll('[data-action="edit-prompt"]').forEach(button => {
-    button.addEventListener('click', (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      editPrompt(promptId);
-    });
-  });
-  
-  document.querySelectorAll('[data-action="toggle-prompt"]').forEach(button => {
-    button.addEventListener('click', (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      const newState = e.target.getAttribute('data-active') === 'true';
-      togglePromptStatus(promptId, newState);
-    });
-  });
-}
+
 // =====================================================================
 // FORM SUBMISSION HANDLERS
 // =====================================================================
@@ -3126,9 +3098,6 @@ function clearSelection() {
   }
 }
 
-function clearPromptsFilters() {
-  console.log('Clear filters');
-}
 
 // =====================================================================
 // ENHANCED SYSTEM STATUS WITH PROMPT METRICS
@@ -3458,7 +3427,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
+document.addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-action') === 'edit-prompt') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('🔍 Edit button clicked!');
+      const promptId = e.target.getAttribute('data-id');
+      console.log('🔍 Prompt ID from button:', promptId);
+      
+      if (promptId) {
+        editPrompt(promptId);
+      } else {
+        console.error('❌ No prompt ID found on edit button');
+        showAlert('danger', 'Could not identify prompt to edit');
+      }
+    }
+  }, true); // Use capture phase
+  
+  // 11. Initialize admin content if starting on admin tab
+  if (window.location.hash === '#admin') {
+    const adminButton = document.querySelector('[data-tab="admin"]');
+    if (adminButton) {
+      adminButton.click();
+    }
+  }
+  
   console.log('✅ Complete enhanced admin system fully initialized');
+  // Enhanced debug edit prompt listener - ADD THIS
+  document.addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-action') === 'edit-prompt') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      console.log('🔍 Edit button clicked!');
+      const promptId = e.target.getAttribute('data-id');
+      console.log('🔍 Prompt ID from button:', promptId);
+      
+      if (promptId) {
+        editPrompt(promptId);
+      } else {
+        console.error('❌ No prompt ID found on edit button');
+        showAlert('danger', 'Could not identify prompt to edit');
+      }
+    }
+  }, true);
+
 });
 
 // =====================================================================
