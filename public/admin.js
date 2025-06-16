@@ -93,6 +93,37 @@ window.fetch = function (url, options) {
 };
 
 // =====================================================================
+// CACHE CLEARING FOR SUCCESSFUL SEGMENT CREATION
+// =====================================================================
+
+// Store original fetch if not already stored
+if (!window.originalFetchForCache) {
+  window.originalFetchForCache = window.fetch;
+}
+
+// Override fetch to clear cache on successful segment-types creation
+window.fetch = function (url, options) {
+  // Only intercept POST requests to segment-types
+  if (url.includes('/api/v1/admin/segment-types') && options?.method === 'POST') {
+    return window.originalFetchForCache.apply(this, arguments).then((response) => {
+      if (response.ok) {
+        console.log('🔧 SUCCESS: Segment type created, clearing cache...');
+
+        // Clear cache after successful creation
+        window.adminDataCache.segmentTypes = null;
+        window.adminDataCache.segmentTypesTimestamp = 0;
+
+        console.log('✅ Cache cleared after successful segment creation');
+      }
+      return response;
+    });
+  }
+
+  // For all other requests, use original fetch
+  return window.originalFetchForCache.apply(this, arguments);
+};
+
+// =====================================================================
 // FUNCTION CALL TRACKING
 // =====================================================================
 
@@ -489,6 +520,15 @@ function setupFormEventListeners() {
           hideModal('createSegmentTypeModal');
           e.target.reset();
           showAlert('success', 'Segment type created successfully');
+
+          // Clear cache before reloading to ensure fresh data
+          if (typeof clearAdminCache === 'function') {
+            clearAdminCache();
+          } else {
+            window.adminDataCache.segmentTypes = null;
+            window.adminDataCache.segmentTypesTimestamp = 0;
+          }
+
           loadSegmentTypes();
         } else {
           const error = await response.json();
@@ -2226,6 +2266,195 @@ window.testParsingTabs = testParsingTabs;
 // SYSTEM ACTIONS
 // =====================================================================
 
+// Add this function to your admin.js file
+function setupSegmentTypeValidation() {
+  const nameField = document.querySelector('#createSegmentTypeForm input[name="name"]');
+  if (!nameField) return;
+
+  console.log('Setting up segment type name validation');
+
+  // Validation function
+  function validateSegmentName(name) {
+    const validPattern = /^[a-z][a-z_]*$/; // Must start with letter, then letters/underscores
+    return validPattern.test(name);
+  }
+
+  // Duplicate checking function
+  async function checkNameExists(name) {
+    try {
+      const response = await fetch('/api/v1/admin/segment-types');
+      const segmentTypes = await response.json();
+      return segmentTypes.some((type) => type.name === name);
+    } catch (error) {
+      console.error('Error checking name:', error);
+      return false;
+    }
+  }
+
+  let checkTimeout;
+
+  // Add real-time validation
+  nameField.addEventListener('input', function (e) {
+    const name = e.target.value;
+    const isValid = validateSegmentName(name);
+
+    // Remove existing validation classes
+    e.target.classList.remove('valid', 'invalid', 'duplicate');
+
+    // Add appropriate class
+    if (name.length > 0) {
+      e.target.classList.add(isValid ? 'valid' : 'invalid');
+    }
+
+    // Show/hide format error message
+    let errorMsg = e.target.parentNode.querySelector('.validation-error');
+    if (!errorMsg) {
+      errorMsg = document.createElement('div');
+      errorMsg.className = 'validation-error';
+      errorMsg.style.cssText = 'color: red; font-size: 12px; margin-top: 5px;';
+      e.target.parentNode.appendChild(errorMsg);
+    }
+
+    if (name.length > 0 && !isValid) {
+      errorMsg.textContent = 'Name must be lowercase with underscores (e.g., car_rental)';
+      errorMsg.style.display = 'block';
+    } else {
+      errorMsg.style.display = 'none';
+    }
+
+    // Debounced duplicate checking
+    clearTimeout(checkTimeout);
+    checkTimeout = setTimeout(async () => {
+      if (name.length > 2 && isValid) {
+        const exists = await checkNameExists(name);
+
+        let duplicateMsg = e.target.parentNode.querySelector('.duplicate-error');
+        if (!duplicateMsg) {
+          duplicateMsg = document.createElement('div');
+          duplicateMsg.className = 'duplicate-error';
+          duplicateMsg.style.cssText = 'color: orange; font-size: 12px; margin-top: 5px;';
+          e.target.parentNode.appendChild(duplicateMsg);
+        }
+
+        if (exists) {
+          duplicateMsg.textContent = '⚠️ This name already exists';
+          duplicateMsg.style.display = 'block';
+          e.target.classList.add('duplicate');
+        } else {
+          duplicateMsg.style.display = 'none';
+          e.target.classList.remove('duplicate');
+        }
+      }
+    }, 500);
+  });
+
+  // Add validation CSS
+  const style = document.createElement('style');
+  style.textContent = `
+    input.valid { border-color: #28a745 !important; }
+    input.invalid { border-color: #dc3545 !important; }
+    input.duplicate { border-color: #ffc107 !important; }
+  `;
+  document.head.appendChild(style);
+
+  console.log('✅ Segment type validation setup complete');
+}
+
+// Call this function in your DOMContentLoaded or when the modal is shown
+// Add this line to your existing DOMContentLoaded section:
+// setupSegmentTypeValidation();
+
+// =====================================================================
+// SIMPLE NAME FIELD VALIDATION - ADD TO YOUR ADMIN.JS
+// =====================================================================
+
+// Add basic validation CSS
+function addNameValidationCSS() {
+  if (document.getElementById('name-validation-css')) return; // Don't add twice
+
+  const style = document.createElement('style');
+  style.id = 'name-validation-css';
+  style.textContent = `
+    input.invalid { 
+      border: 2px solid #dc3545 !important; 
+      background-color: #fff5f5 !important;
+    }
+    .validation-error {
+      color: #dc3545;
+      font-size: 12px;
+      margin-top: 5px;
+      font-weight: 500;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// Simple validation for the name field
+function setupSimpleNameValidation() {
+  const nameField = document.querySelector('#createSegmentTypeForm input[name="name"]');
+  if (!nameField) return;
+
+  console.log('Setting up simple name validation');
+
+  // Remove existing listeners by cloning
+  const newField = nameField.cloneNode(true);
+  nameField.parentNode.replaceChild(newField, nameField);
+
+  function validateName(name) {
+    const validPattern = /^[a-z][a-z_]*$/;
+    return validPattern.test(name);
+  }
+
+  // Add validation to input events
+  ['input', 'keyup', 'blur'].forEach((eventType) => {
+    newField.addEventListener(eventType, function (e) {
+      const name = e.target.value;
+
+      // Remove existing validation
+      e.target.classList.remove('invalid');
+      let errorMsg = e.target.parentNode.querySelector('.validation-error');
+      if (errorMsg) errorMsg.remove();
+
+      if (name.length === 0) return; // Skip validation for empty field
+
+      const isValid = validateName(name);
+
+      if (!isValid) {
+        e.target.classList.add('invalid');
+
+        // Add error message
+        errorMsg = document.createElement('div');
+        errorMsg.className = 'validation-error';
+        errorMsg.textContent =
+          'Must start with a letter, use only lowercase letters and underscores';
+        e.target.parentNode.appendChild(errorMsg);
+      }
+    });
+  });
+}
+
+// Initialize when modal opens
+function initSimpleValidation() {
+  addNameValidationCSS();
+  setupSimpleNameValidation();
+}
+
+// Hook into your existing showModal function
+const originalShowModal = window.showModal;
+if (originalShowModal) {
+  window.showModal = function (modalId) {
+    originalShowModal.call(this, modalId);
+
+    if (modalId === 'createSegmentTypeModal') {
+      setTimeout(initSimpleValidation, 100);
+    }
+  };
+}
+
+// Also run if the modal is already open
+if (document.querySelector('#createSegmentTypeModal[style*="flex"]')) {
+  initSimpleValidation();
+}
 async function fixPSTimezone() {
   try {
     showAlert('info', 'Fixing PS timezone issues...');
@@ -3894,6 +4123,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. Setup form handlers
   setupFormEventListeners();
   setupPromptFormHandlers();
+  setupSegmentTypeValidation();
 
   // 5. Setup enhanced features
   setupKeyboardShortcuts();
