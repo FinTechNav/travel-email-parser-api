@@ -1356,6 +1356,32 @@ router.post('/test-classification', async (req, res) => {
       orderBy: { priority: 'desc' }
     });
 
+
+    router.get('/classification-rules', async (req, res) => {
+  try {
+    // Get all classification rules from database
+    const rules = await prisma.classificationRule.findMany({
+      include: {
+        segmentType: true
+      }
+    });
+    
+    const formattedRules = rules.map(rule => ({
+      id: rule.id,
+      name: rule.name,
+      segmentType: rule.segmentType.name,
+      type: rule.type,
+      pattern: rule.pattern,
+      priority: rule.priority,
+      is_active: rule.isActive
+    }));
+    
+    res.json(formattedRules);
+  } catch (error) {
+    console.error('Error fetching classification rules:', error);
+    res.status(500).json({ error: 'Failed to fetch classification rules' });
+  }
+});
     // Test classification logic
     const searchText = `${subject || ''} ${content} ${sender || ''}`.toLowerCase();
     let matchedRule = null;

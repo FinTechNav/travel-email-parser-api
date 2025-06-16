@@ -1,20 +1,336 @@
 // =====================================================================
 // CSP-COMPLIANT ADMIN PANEL JAVASCRIPT - COMPLETE VERSION
 // =====================================================================
+// =====================================================================
+// ROOT CAUSE DIAGNOSTIC TOOL
+// ADD THIS TO THE TOP OF YOUR admin.js FILE
+// =====================================================================
+// =====================================================================
+// API CALL SOURCE TRACKER - ADD TO TOP OF admin.js
+// =====================================================================
 
+// Track who's calling what API endpoints
+window.apiCallSourceTracker = {
+  calls: [],
+  activeCalls: new Set()
+};
 
-// Prevent multiple initialization
-if (window.adminSystemInitialized) {
-  console.log('Admin system already initialized, skipping...');
-} else {
-  window.adminSystemInitialized = true;
+// Override fetch to track API calls with call stacks
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+  // Only track admin API calls
+  if (url.includes('/api/v1/admin/')) {
+    const callStack = new Error().stack;
+    const timestamp = Date.now();
+    const callId = `${timestamp}-${Math.random().toString(36).substr(2, 5)}`;
+    
+    // Extract the calling function from stack
+    const stackLines = callStack.split('\n');
+    const callerLine = stackLines[2] || 'unknown';
+    const functionMatch = callerLine.match(/at (\w+)/);
+    const callingFunction = functionMatch ? functionMatch[1] : 'anonymous';
+    
+    const callInfo = {
+      id: callId,
+      url: url,
+      timestamp: timestamp,
+      time: new Date(timestamp).toISOString(),
+      callingFunction: callingFunction,
+      fullStack: stackLines.slice(1, 6).join('\n'),
+      completed: false
+    };
+    
+    window.apiCallSourceTracker.calls.push(callInfo);
+    window.apiCallSourceTracker.activeCalls.add(url);
+    
+    console.log(`🔍 API CALL START: ${url}`, {
+      callId: callId,
+      callingFunction: callingFunction,
+      activeCallsForURL: Array.from(window.apiCallSourceTracker.activeCalls).filter(u => u === url).length,
+      totalActiveCalls: window.apiCallSourceTracker.activeCalls.size
+    });
+    
+    // Check for rapid duplicates
+    const recentCalls = window.apiCallSourceTracker.calls.filter(
+      call => call.url === url && (timestamp - call.timestamp) < 5000
+    );
+    
+    if (recentCalls.length > 1) {
+      console.warn(`🚨 DUPLICATE API CALL DETECTED!`);
+      console.warn(`🚨 URL: ${url}`);
+      console.warn(`🚨 Recent calls to this endpoint:`, recentCalls.map(call => ({
+        time: call.time,
+        caller: call.callingFunction,
+        timeDiff: timestamp - call.timestamp + 'ms ago'
+      })));
+    }
+    
+    // Call original fetch and track completion
+    return originalFetch.apply(this, arguments).then(response => {
+      callInfo.completed = true;
+      window.apiCallSourceTracker.activeCalls.delete(url);
+      console.log(`✅ API CALL COMPLETE: ${url} (${callId})`);
+      return response;
+    }).catch(error => {
+      callInfo.completed = true;
+      callInfo.error = error.message;
+      window.apiCallSourceTracker.activeCalls.delete(url);
+      console.error(`❌ API CALL ERROR: ${url} (${callId})`, error);
+      throw error;
+    });
+  }
+  
+  // For non-admin calls, use original fetch
+  return originalFetch.apply(this, arguments);
+};
+
+// =====================================================================
+// FUNCTION CALL TRACKING
+// =====================================================================
+
+// Track specific function calls that make API calls
+function trackLoadFunction(originalFunction, functionName) {
+  return function(...args) {
+    const timestamp = Date.now();
+    const stack = new Error().stack;
+    
+    console.log(`🔍 FUNCTION CALL: ${functionName}`, {
+      timestamp: new Date(timestamp).toISOString(),
+      args: args,
+      calledFrom: stack.split('\n')[2]
+    });
+    
+    // Check if this function was called recently
+    if (!window.functionCallHistory) window.functionCallHistory = {};
+    if (!window.functionCallHistory[functionName]) window.functionCallHistory[functionName] = [];
+    
+    const recentCalls = window.functionCallHistory[functionName].filter(
+      call => (timestamp - call.timestamp) < 2000
+    );
+    
+    if (recentCalls.length > 0) {
+      console.warn(`🚨 RAPID FUNCTION CALL: ${functionName} called ${recentCalls.length + 1} times in 2 seconds`);
+      recentCalls.forEach((call, index) => {
+        console.warn(`  Previous call #${index + 1}:`, {
+          timeAgo: timestamp - call.timestamp + 'ms',
+          calledFrom: call.calledFrom
+        });
+      });
+    }
+    
+    window.functionCallHistory[functionName].push({
+      timestamp: timestamp,
+      calledFrom: stack.split('\n')[2]
+    });
+    
+    // Call the original function
+    return originalFunction.apply(this, args);
+  };
 }
 
+// =====================================================================
+// WRAP YOUR LOAD FUNCTIONS
+// ADD THIS AFTER YOUR EXISTING FUNCTION DEFINITIONS
+// =====================================================================
+
+// Find your existing loadPrompts function and replace it with:
+const originalLoadPrompts = window.loadPrompts;
+if (originalLoadPrompts) {
+  window.loadPrompts = trackLoadFunction(originalLoadPrompts, 'loadPrompts');
+}
+
+// Find your existing loadSegmentTypes function and replace it with:
+const originalLoadSegmentTypes = window.loadSegmentTypes;
+if (originalLoadSegmentTypes) {
+  window.loadSegmentTypes = trackLoadFunction(originalLoadSegmentTypes, 'loadSegmentTypes');
+}
+
+// Find your existing loadClassificationRules function and replace it with:
+const originalLoadClassificationRules = window.loadClassificationRules;
+if (originalLoadClassificationRules) {
+  window.loadClassificationRules = trackLoadFunction(originalLoadClassificationRules, 'loadClassificationRules');
+}
+
+// =====================================================================
+// TAB SWITCHING TRACKER
+// =====================================================================
+
+// Track tab switching which might trigger multiple loads
+const originalShowTab = window.showTab;
+if (originalShowTab) {
+  window.showTab = function(tabName, clickedButton) {
+    console.log(`🔍 TAB SWITCH: Switching to ${tabName}`, {
+      timestamp: new Date().toISOString(),
+      calledFrom: new Error().stack.split('\n')[2]
+    });
+    
+    return originalShowTab.call(this, tabName, clickedButton);
+  };
+}
+
+// =====================================================================
+// DIAGNOSTIC FUNCTIONS
+// =====================================================================
+
+function showApiCallSummary() {
+  console.log('🔍 API CALL SUMMARY:');
+  console.log('🔍 Total API calls made:', window.apiCallSourceTracker.calls.length);
+  
+  // Group by URL
+  const callsByURL = {};
+  window.apiCallSourceTracker.calls.forEach(call => {
+    if (!callsByURL[call.url]) callsByURL[call.url] = [];
+    callsByURL[call.url].push(call);
+  });
+  
+  for (const [url, calls] of Object.entries(callsByURL)) {
+    console.log(`🔍 ${url}: ${calls.length} calls`);
+    
+    if (calls.length > 1) {
+      console.warn(`🚨 MULTIPLE CALLS TO: ${url}`);
+      calls.forEach((call, index) => {
+        console.warn(`  Call #${index + 1}:`, {
+          time: call.time,
+          caller: call.callingFunction,
+          id: call.id
+        });
+      });
+    }
+  }
+  
+  console.log('🔍 FUNCTION CALL HISTORY:');
+  for (const [functionName, calls] of Object.entries(window.functionCallHistory || {})) {
+    if (calls.length > 1) {
+      console.warn(`🚨 ${functionName}: ${calls.length} calls`);
+      calls.forEach((call, index) => {
+        console.warn(`  Call #${index + 1}: ${call.timestamp} from ${call.calledFrom}`);
+      });
+    }
+  }
+}
+
+function resetApiTracking() {
+  window.apiCallSourceTracker = {
+    calls: [],
+    activeCalls: new Set()
+  };
+  window.functionCallHistory = {};
+  console.log('🔄 API tracking reset');
+}
+
+// Make functions globally available
+window.showApiCallSummary = showApiCallSummary;
+window.resetApiTracking = resetApiTracking;
+
+// Enhanced cache with promise tracking
+window.adminDataCache = {
+  segmentTypes: null,
+  segmentTypesTimestamp: 0,
+  segmentTypesPromise: null, // Track ongoing fetch
+  cacheTimeout: 30000 // 30 seconds cache
+};
+
+// =====================================================================
+// AUTO-SUMMARY AFTER ADMIN TAB LOAD
+// =====================================================================
+
+// Wait a bit after page load, then show summary
+setTimeout(() => {
+  console.log('🔍 API CALL TRACKER READY');
+  console.log('🔍 Available commands:');
+  console.log('  showApiCallSummary() - Show all API calls and their sources');
+  console.log('  resetApiTracking() - Reset tracking');
+  console.log('  window.apiCallSourceTracker.calls - Raw call data');
+}, 2000);
+
+// Auto-summary after suspected duplicates
+let summaryTimeout;
+const originalSetTimeout = window.setTimeout;
+window.setTimeout = function(callback, delay) {
+  // If this is a delay in showTab or similar, schedule a summary
+  if (delay === 100 && new Error().stack.includes('showTab')) {
+    if (summaryTimeout) clearTimeout(summaryTimeout);
+    summaryTimeout = originalSetTimeout(() => {
+      console.log('🔍 AUTO-SUMMARY: After tab switching delay...');
+      showApiCallSummary();
+    }, delay + 500);
+  }
+  
+  return originalSetTimeout.call(this, callback, delay);
+};
+// Track all event listener registrations
+window.eventHandlerDiagnostics = {
+  registrations: [],
+  callStacks: [],
+  duplicateWarnings: []
+};
+
+// Override addEventListener to track registrations
+const originalAddEventListener = Document.prototype.addEventListener;
+Document.prototype.addEventListener = function(event, handler, options) {
+  if (event === 'click') {
+    const stack = new Error().stack;
+    window.eventHandlerDiagnostics.registrations.push({
+      timestamp: Date.now(),
+      event: event,
+      handlerName: handler.name || 'anonymous',
+      stack: stack.split('\n').slice(1, 4).join('\n'),
+      options: options
+    });
+    
+    console.log('🔍 CLICK LISTENER REGISTERED:', {
+      count: window.eventHandlerDiagnostics.registrations.length,
+      handlerName: handler.name || 'anonymous',
+      stack: stack.split('\n')[2]
+    });
+  }
+  
+  return originalAddEventListener.call(this, event, handler, options);
+};
+
+// =====================================================================
+// FUNCTION CALL TRACKER
+// =====================================================================
+
+// Track function calls that might cause duplicates
+function trackFunctionCall(functionName) {
+  const stack = new Error().stack;
+  const caller = stack.split('\n')[2];
+  
+  if (!window.functionCallTracker) window.functionCallTracker = {};
+  if (!window.functionCallTracker[functionName]) {
+    window.functionCallTracker[functionName] = [];
+  }
+  
+  window.functionCallTracker[functionName].push({
+    timestamp: Date.now(),
+    caller: caller
+  });
+  
+  const callCount = window.functionCallTracker[functionName].length;
+  if (callCount > 1) {
+    console.warn(`🚨 DUPLICATE CALL #${callCount}: ${functionName}`);
+    console.warn('🚨 Called from:', caller);
+  }
+}
+
+
+
+
+
+window.clickTracker = {
+  editPromptClicks: 0,
+  lastClickTime: 0,
+  handlers: []
+};
 // =====================================================================
 // TAB MANAGEMENT
 // =====================================================================
 
 function showTab(tabName, clickedButton) {
+  trackFunctionCall('showTab');
+  console.log('🔍 TAB: showTab called with:', tabName, 'from:', new Error().stack.split('\n')[2]);
+  
   // Hide all tab contents
   document.querySelectorAll('.tab-content').forEach(tab => {
     tab.classList.remove('active');
@@ -31,10 +347,12 @@ function showTab(tabName, clickedButton) {
   
   // Load admin content if admin tab selected
   if (tabName === 'admin') {
+    console.log('🔍 TAB: Loading admin content...');
     loadModals(); // Your existing function
     
     // Small delay to ensure DOM is ready, then load all admin content
     setTimeout(() => {
+      console.log('🔍 TAB: Calling load functions...');
       loadSegmentTypes();     // Your existing
       loadClassificationRules(); // Your existing
       loadPrompts();         // NEW - AI Prompts loading
@@ -387,19 +705,66 @@ function setupAdminActionListeners() {
 // =====================================================================
 
 async function loadSegmentTypes() {
+  trackFunctionCall('loadSegmentTypes');
+  console.log('🔍 LOAD: loadSegmentTypes called from:', new Error().stack.split('\n')[2]);
+  
   const container = document.getElementById('segmentTypesContainer');
+  if (!container) return;
+  
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading segment types...</div>';
 
   try {
-    const response = await fetch('/api/v1/admin/segment-types');
-    if (response.ok) {
-      const segmentTypes = await response.json();
+    // Check cache first
+    const now = Date.now();
+    if (window.adminDataCache.segmentTypes && 
+        (now - window.adminDataCache.segmentTypesTimestamp) < window.adminDataCache.cacheTimeout) {
+      console.log('✅ loadSegmentTypes: Using cached data');
+      const segmentTypes = window.adminDataCache.segmentTypes;
       displaySegmentTypes(segmentTypes);
       document.getElementById('segmentTypeCount').textContent = `${segmentTypes.length} types`;
-    } else {
-      throw new Error('Failed to load segment types');
+      return segmentTypes; // Return cached data
     }
+    
+    // Check if fetch is already in progress
+    if (window.adminDataCache.segmentTypesPromise) {
+      console.log('⏳ loadSegmentTypes: Waiting for ongoing fetch...');
+      const segmentTypes = await window.adminDataCache.segmentTypesPromise;
+      displaySegmentTypes(segmentTypes);
+      document.getElementById('segmentTypeCount').textContent = `${segmentTypes.length} types`;
+      return segmentTypes;
+    }
+    
+    console.log('🔄 loadSegmentTypes: Making API call (cache miss)');
+    
+    // Start fetch and store promise
+    window.adminDataCache.segmentTypesPromise = fetch('/api/v1/admin/segment-types')
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to load segment types');
+        return response.json();
+      })
+      .then(segmentTypes => {
+        console.log('✅ loadSegmentTypes: Received', segmentTypes.length, 'segment types');
+        
+        // Cache the data
+        window.adminDataCache.segmentTypes = segmentTypes;
+        window.adminDataCache.segmentTypesTimestamp = Date.now();
+        window.adminDataCache.segmentTypesPromise = null; // Clear promise
+        
+        return segmentTypes;
+      })
+      .catch(error => {
+        console.error('❌ loadSegmentTypes: Error', error);
+        window.adminDataCache.segmentTypesPromise = null; // Clear promise on error
+        throw error;
+      });
+    
+    const segmentTypes = await window.adminDataCache.segmentTypesPromise;
+    displaySegmentTypes(segmentTypes);
+    document.getElementById('segmentTypeCount').textContent = `${segmentTypes.length} types`;
+    return segmentTypes;
+    
   } catch (error) {
+    console.error('❌ loadSegmentTypes: Error', error);
     container.innerHTML = `
       <div class="alert alert-danger">
         ❌ Could not load segment types.<br>
@@ -407,6 +772,7 @@ async function loadSegmentTypes() {
         <small>Run: <code>node scripts/setup-admin-system-fixed.js</code></small>
       </div>
     `;
+    throw error;
   }
 }
 
@@ -456,8 +822,6 @@ function displaySegmentTypes(segmentTypes) {
   
   container.innerHTML = tableHTML;
   
-  // Add event listeners to the new buttons
-  setupTableActionListeners();
 }
 
 // =====================================================================
@@ -465,28 +829,85 @@ function displaySegmentTypes(segmentTypes) {
 // =====================================================================
 
 async function loadClassificationRules() {
+  trackFunctionCall('loadClassificationRules');
+  console.log('🔍 LOAD: loadClassificationRules called from:', new Error().stack.split('\n')[2]);
+  
   const container = document.getElementById('classificationRulesContainer');
+  if (!container) return;
+  
   container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading classification rules...</div>';
 
   try {
-    const response = await fetch('/api/v1/admin/segment-types');
+    console.log('🔄 loadClassificationRules: Attempting dedicated endpoint...');
+    
+    // Try dedicated classification rules endpoint first
+    let response = await fetch('/api/v1/admin/classification-rules');
+    
     if (response.ok) {
-      const segmentTypes = await response.json();
-      const allRules = segmentTypes.flatMap(type => 
-        (type.classificationRules || []).map(rule => ({ ...rule, segmentType: type.name }))
-      );
-      
-      // DEDUPLICATE by rule ID
-      const uniqueRules = allRules.filter((rule, index, self) => 
-        index === self.findIndex(r => r.id === rule.id)
-      );
-      
-      displayClassificationRules(uniqueRules);
-      document.getElementById('ruleCount').textContent = `${uniqueRules.length} rules`;
-    } else {
-      throw new Error('Failed to load rules');
+      const rules = await response.json();
+      console.log('✅ loadClassificationRules: Using dedicated endpoint, received', rules.length, 'rules');
+      displayClassificationRules(rules);
+      document.getElementById('ruleCount').textContent = `${rules.length} rules`;
+      return;
     }
+    
+    // Fallback: Get segment types data (coordinated)
+    console.log('🔄 loadClassificationRules: Getting segment types data...');
+    
+    let segmentTypes = null;
+    const now = Date.now();
+    
+    // Check if we have fresh cached data
+    if (window.adminDataCache.segmentTypes && 
+        (now - window.adminDataCache.segmentTypesTimestamp) < window.adminDataCache.cacheTimeout) {
+      console.log('✅ loadClassificationRules: Using cached segment types');
+      segmentTypes = window.adminDataCache.segmentTypes;
+    } 
+    // Check if fetch is in progress - WAIT FOR IT
+    else if (window.adminDataCache.segmentTypesPromise) {
+      console.log('⏳ loadClassificationRules: Waiting for ongoing segment types fetch...');
+      segmentTypes = await window.adminDataCache.segmentTypesPromise;
+    } 
+    // Need to fetch ourselves
+    else {
+      console.log('🔄 loadClassificationRules: No cache, fetching segment types');
+      
+      // Start coordinated fetch
+      window.adminDataCache.segmentTypesPromise = fetch('/api/v1/admin/segment-types')
+        .then(response => {
+          if (!response.ok) throw new Error('Failed to load segment types');
+          return response.json();
+        })
+        .then(data => {
+          window.adminDataCache.segmentTypes = data;
+          window.adminDataCache.segmentTypesTimestamp = Date.now();
+          window.adminDataCache.segmentTypesPromise = null;
+          return data;
+        })
+        .catch(error => {
+          window.adminDataCache.segmentTypesPromise = null;
+          throw error;
+        });
+      
+      segmentTypes = await window.adminDataCache.segmentTypesPromise;
+    }
+    
+    // Process classification rules from segment types
+    const allRules = segmentTypes.flatMap(type => 
+      (type.classificationRules || []).map(rule => ({ ...rule, segmentType: type.name }))
+    );
+    
+    // DEDUPLICATE by rule ID
+    const uniqueRules = allRules.filter((rule, index, self) => 
+      index === self.findIndex(r => r.id === rule.id)
+    );
+    
+    console.log('✅ loadClassificationRules: Processed', uniqueRules.length, 'unique rules');
+    displayClassificationRules(uniqueRules);
+    document.getElementById('ruleCount').textContent = `${uniqueRules.length} rules`;
+    
   } catch (error) {
+    console.error('❌ loadClassificationRules: Error', error);
     container.innerHTML = `
       <div class="alert alert-danger">
         ❌ Could not load classification rules. Admin system may not be set up yet.
@@ -494,6 +915,39 @@ async function loadClassificationRules() {
     `;
   }
 }
+
+// =====================================================================
+// ADD CACHE MANAGEMENT FUNCTIONS
+// =====================================================================
+
+function clearAdminCache() {
+  window.adminDataCache = {
+    segmentTypes: null,
+    segmentTypesTimestamp: 0,
+    cacheTimeout: 30000
+  };
+  console.log('🔄 Admin data cache cleared');
+}
+
+function refreshAdminData() {
+  console.log('🔄 Refreshing admin data...');
+  clearAdminCache();
+  
+  // Reload current data
+  if (document.getElementById('segmentTypesContainer')) {
+    loadSegmentTypes();
+  }
+  if (document.getElementById('classificationRulesContainer')) {
+    loadClassificationRules();
+  }
+  if (document.getElementById('promptsContainer')) {
+    loadPrompts();
+  }
+}
+
+// Make functions globally available
+window.clearAdminCache = clearAdminCache;
+window.refreshAdminData = refreshAdminData;
 
 function displayClassificationRules(rules) {
   const container = document.getElementById('classificationRulesContainer');
@@ -540,15 +994,28 @@ function displayClassificationRules(rules) {
   `;
   
   container.innerHTML = tableHTML;
-  setupTableActionListeners();
 }
+
+function showCacheStatus() {
+  console.log('🔍 ADMIN CACHE STATUS:');
+  console.log('🔍 Segment Types cached:', !!window.adminDataCache.segmentTypes);
+  console.log('🔍 Cache timestamp:', new Date(window.adminDataCache.segmentTypesTimestamp).toISOString());
+  console.log('🔍 Cache age:', (Date.now() - window.adminDataCache.segmentTypesTimestamp) + 'ms');
+  console.log('🔍 Cache timeout:', window.adminDataCache.cacheTimeout + 'ms');
+  console.log('🔍 Cache valid:', (Date.now() - window.adminDataCache.segmentTypesTimestamp) < window.adminDataCache.cacheTimeout);
+  console.log('🔍 Ongoing fetch:', !!window.adminDataCache.segmentTypesPromise);
+}
+
+window.showCacheStatus = showCacheStatus;
 
 // =====================================================================
 // AI PROMPTS MANAGEMENT 
 // =====================================================================
 
-
 async function loadPrompts() {
+  trackFunctionCall('loadPrompts');
+  console.log('🔍 LOAD: loadPrompts called from:', new Error().stack.split('\n')[2]);
+  
   const container = document.getElementById('promptsContainer');
   if (!container) return;
   
@@ -557,7 +1024,6 @@ async function loadPrompts() {
   try {
     const response = await fetch('/api/v1/admin/prompts');
     if (response.ok) {
-
       const prompts = await response.json();
       displayPrompts(prompts);
 
@@ -777,57 +1243,88 @@ function switchPromptCategory(category) {
 // =====================================================================
 
 function setupPromptActionListeners() {
-  // Edit prompt button
-  document.querySelectorAll('[data-action="edit-prompt"]').forEach(button => {
-    button.addEventListener('click', async (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      await editPrompt(promptId);
-    });
-  });
-
-  // Toggle prompt active status
-  document.querySelectorAll('[data-action="toggle-prompt"]').forEach(button => {
-    button.addEventListener('click', async (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      const newActiveState = e.target.getAttribute('data-active') === 'true';
-      await togglePromptStatus(promptId, newActiveState);
-    });
-  });
-
-  // Duplicate prompt
-  document.querySelectorAll('[data-action="duplicate-prompt"]').forEach(button => {
-    button.addEventListener('click', async (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      await duplicatePrompt(promptId);
-    });
-  });
-
-  // Delete prompt
-  document.querySelectorAll('[data-action="delete-prompt"]').forEach(button => {
-    button.addEventListener('click', async (e) => {
-      const promptId = e.target.getAttribute('data-id');
-      await deletePrompt(promptId);
-    });
-  });
+  // All prompt actions are handled by setupTableActionListeners via event delegation
+  console.log('✅ Prompt action listeners setup complete');
 }
 
 async function editPrompt(promptId) {
+  console.log('🔧 editPrompt called with ID:', promptId);
+  
   try {
-    // Fetch current prompt data
+    console.log('🔧 Fetching prompt data...');
     const response = await fetch(`/api/v1/admin/prompts/${promptId}`);
-    if (!response.ok) throw new Error('Failed to fetch prompt data');
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch prompt: ${response.status}`);
+    }
     
     const prompt = await response.json();
+    console.log('🔧 Prompt data received:', prompt.name);
     
-    // Populate edit modal with current data
-    populatePromptEditModal(prompt);
+    // Ensure modal exists
+    let modal = document.getElementById('editPromptModal');
+    if (!modal) {
+      console.log('🔧 Creating edit modal...');
+      createEditPromptModal();
+      modal = document.getElementById('editPromptModal');
+    }
+    
+    // Populate modal
+    if (typeof populatePromptEditModal === 'function') {
+      populatePromptEditModal(prompt);
+    } else {
+      // Fallback manual population
+      const idField = document.getElementById('editPromptId');
+      const nameField = document.getElementById('editPromptName');
+      const versionField = document.getElementById('editPromptVersion');
+      const textField = document.getElementById('editPromptText');
+      const activeField = document.getElementById('editPromptActive');
+      
+      if (idField) idField.value = prompt.id;
+      if (nameField) nameField.value = prompt.name;
+      if (versionField) versionField.value = prompt.version;
+      if (textField) textField.value = prompt.prompt;
+      if (activeField) activeField.checked = prompt.isActive;
+    }
+    
+    // Show modal
     showModal('editPromptModal');
     
   } catch (error) {
-    console.error('Error loading prompt for editing:', error);
+    console.error('❌ Error in editPrompt:', error);
     showAlert('danger', 'Failed to load prompt data for editing');
   }
 }
+function testEditButton() {
+  console.log('🧪 TEST: Starting edit button diagnostic...');
+  
+  const editButtons = document.querySelectorAll('[data-action="edit-prompt"]');
+  console.log('🧪 TEST: Found', editButtons.length, 'edit buttons');
+  
+  if (editButtons.length > 0) {
+    const firstButton = editButtons[0];
+    console.log('🧪 TEST: Testing first button with ID:', firstButton.getAttribute('data-id'));
+    
+    // Reset click counter
+    window.clickTracker.editPromptClicks = 0;
+    window.clickTracker.lastClickTime = 0;
+    
+    console.log('🧪 TEST: Simulating click...');
+    firstButton.click();
+    
+    setTimeout(() => {
+      console.log('🧪 TEST RESULTS:', {
+        totalClicks: window.clickTracker.editPromptClicks,
+        handlersRegistered: window.clickTracker.handlers.length,
+        expectedClicks: 1,
+        issue: window.clickTracker.editPromptClicks > 1 ? 'DUPLICATE HANDLERS DETECTED' : 'Normal'
+      });
+    }, 500);
+  }
+}
+
+// Make test function available globally
+window.testEditButton = testEditButton;
 
 async function togglePromptStatus(promptId, newActiveState) {
   try {
@@ -1544,47 +2041,97 @@ function addPromptStyles() {
 // =====================================================================
 
 function setupTableActionListeners() {
-  // Handle all table action buttons with event delegation
+  // Guard against multiple installations
+  if (window._tableActionHandlerInstalled) {
+    console.log('🚨 Table action handler already installed, skipping');
+    return;
+  }
+  
+  window._tableActionHandlerInstalled = {
+    timestamp: Date.now(),
+    source: 'DOMContentLoaded'
+  };
+  
+  console.log('🔍 Installing table action handler');
+  
   document.addEventListener('click', function(e) {
     const target = e.target;
     const action = target.getAttribute('data-action');
     
-    if (!action) return;
+    // Only handle table-specific actions
+    const tableActions = ['edit-prompt', 'toggle-prompt', 'delete-prompt', 'duplicate-prompt', 
+                         'edit-segment-type', 'toggle-segment-type', 'edit-rule', 'delete-rule'];
+    
+    if (!tableActions.includes(action)) return;
     
     e.preventDefault();
+    e.stopImmediatePropagation();
     
     const id = target.getAttribute('data-id');
     const name = target.getAttribute('data-name');
     const active = target.getAttribute('data-active') === 'true';
     
     switch(action) {
-      case 'edit-segment-type':
-        editSegmentType(name);
-        break;
-      case 'toggle-segment-type':
-        toggleSegmentType(name, active);
-        break;
-      case 'edit-rule':
-        editRule(id);
-        break;
-      case 'delete-rule':
-        deleteRule(id);
-        break;
       case 'edit-prompt':
         editPrompt(id);
         break;
       case 'toggle-prompt':
-        togglePrompt(id, active);
+        if (typeof togglePrompt === 'function') togglePrompt(id, active);
         break;
       case 'duplicate-prompt':
-        duplicatePrompt(id);
+        if (typeof duplicatePrompt === 'function') duplicatePrompt(id);
         break;
       case 'delete-prompt':
-        deletePrompt(id);
+        if (typeof deletePrompt === 'function') deletePrompt(id);
+        break;
+      case 'edit-segment-type':
+        if (typeof editSegmentType === 'function') editSegmentType(name);
+        break;
+      case 'toggle-segment-type':
+        if (typeof toggleSegmentType === 'function') toggleSegmentType(name, active);
+        break;
+      case 'edit-rule':
+        if (typeof editRule === 'function') editRule(id);
+        break;
+      case 'delete-rule':
+        if (typeof deleteRule === 'function') deleteRule(id);
         break;
     }
   });
+  
+  console.log('✅ Table action handler installed');
 }
+
+// Add this function to handle parsing tab switching
+function setupPromptCategorySwitching() {
+  document.addEventListener('click', function(e) {
+    if (e.target.getAttribute('data-action') === 'switch-prompt-category') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      
+      const category = e.target.getAttribute('data-category');
+      console.log('🔄 Switching to prompt category:', category);
+      
+      // Hide all prompt category sections
+      document.querySelectorAll('.prompt-category-section').forEach(section => {
+        section.style.display = 'none';
+      });
+      
+      // Show the selected category section
+      const targetSection = document.querySelector(`.prompt-category-section[data-category="${category}"]`);
+      if (targetSection) {
+        targetSection.style.display = 'block';
+      }
+      
+      // Update tab button states
+      document.querySelectorAll('[data-action="switch-prompt-category"]').forEach(button => {
+        button.classList.remove('active');
+      });
+      e.target.classList.add('active');
+    }
+  }, true);
+}
+
 // =====================================================================
 // SYSTEM ACTIONS
 // =====================================================================
@@ -3227,13 +3774,10 @@ function displayEnhancedSystemStatus(systemStatus, promptAnalytics) {
   
   container.innerHTML = statusHTML;
 }
-
+// Add this line to your existing DOMContentLoaded section:
+setTimeout(diagnoseEventHandlers, 2000); // Run diagnostics after everything loads
 // =====================================================================
 // CONSOLIDATED INITIALIZATION - ENHANCED VERSION
-// =====================================================================
-// =====================================================================
-// CONSOLIDATED INITIALIZATION - CLEAN VERSION
-// Assumes all functions are already implemented elsewhere in the file
 // =====================================================================
 
 // =====================================================================
@@ -3248,12 +3792,39 @@ document.addEventListener('DOMContentLoaded', () => {
   window.adminSystemInitialized = true;
   
   console.log('🚀 Initializing complete enhanced admin system...');
-  
-  // =================================================================
-  // 1. ADD CSS STYLES FIRST
-  // =================================================================
+
+    // 1. Add CSS styles first
   addPromptStyles();
   
+  // 2. Setup ALL event listeners
+  setupTabEventListeners();
+  setupAdminActionListeners();
+  setupTableActionListeners(); // ← CRITICAL: Ensure this is called
+  
+  // 3. Create working modals
+  createWorkingModals();
+  
+  // 4. Setup form handlers
+  setupFormEventListeners();
+  setupPromptFormHandlers();
+  
+  // 5. Setup enhanced features
+  setupKeyboardShortcuts();
+  addPromptsHelpButton();
+  
+  // 6. Add parsing tab handler
+  setupPromptCategorySwitching();
+
+    // 7. Initialize admin content if starting on admin tab
+  if (window.location.hash === '#admin') {
+    const adminButton = document.querySelector('[data-tab="admin"]');
+    if (adminButton) {
+      adminButton.click();
+    }
+  }
+  
+  console.log('✅ Complete enhanced admin system fully initialized');
+
   // =================================================================
   // 2. SETUP TAB NAVIGATION
   // =================================================================
@@ -3266,36 +3837,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   
-  // =================================================================
-  // 3. SETUP ADMIN ACTION LISTENERS
-  // =================================================================
-  setupAdminActionListeners();
-  
-  // =================================================================
-  // 4. SETUP TABLE ACTION LISTENERS (CONSOLIDATED)
-  // =================================================================
-  setupTableActionListeners();
-  
-  // =================================================================
-  // 5. CREATE WORKING MODALS
-  // =================================================================
-  createWorkingModals();
-  
-  // =================================================================
-  // 6. SETUP FORM HANDLERS
-  // =================================================================
-  setupFormEventListeners();
-  setupPromptFormHandlers();
-  
-  // =================================================================
-  // 7. SETUP ENHANCED FEATURES
-  // =================================================================
-  
-  // Setup keyboard shortcuts for power users
-  setupKeyboardShortcuts();
-  
-  // Add help button
-  addPromptsHelpButton();
+ 
   
   // Add prompt modals to the DOM
   const modalContainer = document.querySelector('#modals-container') || document.body;
@@ -3333,145 +3875,32 @@ document.addEventListener('DOMContentLoaded', () => {
   // 9. PROMPT TAB SWITCHING EVENT DELEGATION
   // =================================================================
   
-  document.addEventListener('click', function(e) {
-    if (e.target.getAttribute('data-action') === 'switch-prompt-category') {
-      e.preventDefault();
-      e.stopPropagation(); // Prevent other handlers from interfering
-      
-      const category = e.target.getAttribute('data-category');
-      console.log('🔄 Switching to prompt category:', category);
-      
-      // Hide all prompt category sections
-      document.querySelectorAll('.prompt-category-section').forEach(section => {
-        section.style.display = 'none';
-      });
-      
-      // Show the selected category section
-      const targetSection = document.querySelector(`.prompt-category-section[data-category="${category}"]`);
-      if (targetSection) {
-        targetSection.style.display = 'block';
-        console.log('✅ Showing section for category:', category);
-      } else {
-        console.error('❌ Could not find section for category:', category);
-      }
-      
-      // Update tab button states
-      document.querySelectorAll('[data-action="switch-prompt-category"]').forEach(button => {
-        button.classList.remove('active');
-      });
-      e.target.classList.add('active');
-      
-      console.log('🎯 Tab switching complete for category:', category);
-    }
-  }, true); // Use capture phase to ensure this runs first
-  
-  // =================================================================
-  // 10. ENHANCED DEBUG EDIT PROMPT LISTENER
-  // =================================================================
-  
-  document.addEventListener('click', function(e) {
-    if (e.target.getAttribute('data-action') === 'edit-prompt') {
-      console.log('🔍 Edit button clicked!');
-      const promptId = e.target.getAttribute('data-id');
-      console.log('🔍 Prompt ID from button:', promptId);
-      
-      const editPromptWithDebug = async (id) => {
-        try {
-          console.log('🔄 Attempting to fetch prompt with ID:', id);
-          const response = await fetch(`/api/v1/admin/prompts/${id}`);
-          console.log('🔍 Response status:', response.status);
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ API Error Response:', errorText);
-            showAlert('danger', `Failed to load prompt: ${response.status} - ${errorText}`);
-            return;
-          }
-          
-          const prompt = await response.json();
-          console.log('✅ Prompt data received:', prompt);
-          
-          console.log('🔄 Checking if edit modal exists...');
-          const editModal = document.getElementById('editPromptModal');
-          console.log('🔍 Edit modal element:', editModal);
-          
-          if (!editModal) {
-            console.log('⚠️ Edit modal not found! Creating it now...');
-            createEditPromptModal();
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          
-          console.log('🔄 Attempting to populate modal...');
-          populatePromptEditModal(prompt);
-          
-          console.log('🔄 Attempting to show edit modal...');
-          showModal('editPromptModal');
-          
-        } catch (error) {
-          console.error('❌ Error in editPrompt:', error);
-          showAlert('danger', 'Failed to load prompt data for editing');
-        }
-      };
-      
-      editPromptWithDebug(promptId);
-    }
-  }, true);
-  
-  // =================================================================
-  // 11. INITIALIZE ADMIN CONTENT IF STARTING ON ADMIN TAB
-  // =================================================================
-  if (window.location.hash === '#admin') {
-    const adminButton = document.querySelector('[data-tab="admin"]');
-    if (adminButton) {
-      adminButton.click();
-    }
-  }
-  
 document.addEventListener('click', function(e) {
-    if (e.target.getAttribute('data-action') === 'edit-prompt') {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      console.log('🔍 Edit button clicked!');
-      const promptId = e.target.getAttribute('data-id');
-      console.log('🔍 Prompt ID from button:', promptId);
-      
-      if (promptId) {
-        editPrompt(promptId);
-      } else {
-        console.error('❌ No prompt ID found on edit button');
-        showAlert('danger', 'Could not identify prompt to edit');
-      }
-    }
-  }, true); // Use capture phase
-  
-  // 11. Initialize admin content if starting on admin tab
-  if (window.location.hash === '#admin') {
-    const adminButton = document.querySelector('[data-tab="admin"]');
-    if (adminButton) {
-      adminButton.click();
-    }
+  if (e.target.getAttribute('data-action') === 'edit-prompt') {
+    const now = Date.now();
+    const timeSinceLastClick = now - window.clickTracker.lastClickTime;
+    
+    console.log('🚨 DUPLICATE HANDLER: Edit prompt clicked in secondary handler!', {
+      timeSinceLastClick: timeSinceLastClick + 'ms',
+      promptId: e.target.getAttribute('data-id'),
+      clickNumber: ++window.clickTracker.editPromptClicks
+    });
+    
+    // STOP THIS HANDLER FROM EXECUTING TO TEST
+    console.log('🚨 BLOCKING: Preventing secondary handler execution');
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    return; // Don't execute the duplicate logic
+    
+    // The rest of your original code here is now blocked for testing
   }
-  
-  console.log('✅ Complete enhanced admin system fully initialized');
-  // Enhanced debug edit prompt listener - ADD THIS
-  document.addEventListener('click', function(e) {
-    if (e.target.getAttribute('data-action') === 'edit-prompt') {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      console.log('🔍 Edit button clicked!');
-      const promptId = e.target.getAttribute('data-id');
-      console.log('🔍 Prompt ID from button:', promptId);
-      
-      if (promptId) {
-        editPrompt(promptId);
-      } else {
-        console.error('❌ No prompt ID found on edit button');
-        showAlert('danger', 'Could not identify prompt to edit');
-      }
-    }
-  }, true);
+}, true);
+
+
+  setTimeout(() => {
+  console.log('🧪 READY: Run testEditButton() to diagnose the issue');
+  console.log('🧪 READY: Handler count:', window.clickTracker.handlers.length);
+}, 2000);
 
 });
 
@@ -3513,12 +3942,6 @@ window.switchTab = function(tabName) {
 
 // Update the main admin initialization
 function initializeAdminSystem() {
-  // Guard against multiple initialization
-  if (window.adminSystemInitialized) {
-    console.log('Admin system already initialized');
-    return;
-  }
-  window.adminSystemInitialized = true;
   
   console.log('🚀 Initializing enhanced admin system...');
   
@@ -3682,3 +4105,59 @@ window.reprocessFailedSegments = async () => {
 };
 
 console.log('📦 Global admin functions exported to window object');
+
+function diagnoseEventHandlers() {
+  console.log('🔍 EVENT HANDLER DIAGNOSTICS:');
+  console.log('🔍 Total click listeners registered:', window.eventHandlerDiagnostics.registrations.length);
+  
+  window.eventHandlerDiagnostics.registrations.forEach((reg, index) => {
+    console.log(`🔍 Listener #${index + 1}:`, {
+      timestamp: new Date(reg.timestamp).toISOString(),
+      handlerName: reg.handlerName,
+      stack: reg.stack
+    });
+  });
+  
+  console.log('🔍 FUNCTION CALL COUNTS:');
+  for (const [functionName, calls] of Object.entries(window.functionCallTracker || {})) {
+    console.log(`🔍 ${functionName}: ${calls.length} calls`);
+    if (calls.length > 1) {
+      console.warn(`🚨 ${functionName} called ${calls.length} times!`);
+      calls.forEach((call, index) => {
+        console.warn(`  Call #${index + 1}:`, call.caller);
+      });
+    }
+  }
+  
+  console.log('🔍 TABLE HANDLER STATUS:');
+  console.log('🔍 Handler installed:', !!window._tableActionHandlerInstalled);
+  if (window._tableActionHandlerInstalled) {
+    console.log('🔍 Installation details:', window._tableActionHandlerInstalled);
+  }
+}
+
+function resetDiagnostics() {
+  window.eventHandlerDiagnostics = {
+    registrations: [],
+    callStacks: [],
+    duplicateWarnings: []
+  };
+  window.functionCallTracker = {};
+  window._tableActionHandlerInstalled = null;
+  console.log('🔄 Diagnostics reset');
+}
+
+// Make functions globally available
+window.diagnoseEventHandlers = diagnoseEventHandlers;
+window.resetDiagnostics = resetDiagnostics;
+
+// Run diagnostics after everything loads
+setTimeout(() => {
+  console.log('🔍 AUTO-DIAGNOSTIC: Running after page load...');
+  diagnoseEventHandlers();
+  
+  console.log('🔍 AUTO-DIAGNOSTIC: Available commands:');
+  console.log('  diagnoseEventHandlers() - Show current handler status');
+  console.log('  resetDiagnostics() - Reset tracking');
+  console.log('  window.functionCallTracker - View function call history');
+}, 3000);
