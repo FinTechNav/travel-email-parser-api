@@ -1,5 +1,5 @@
-// PERMANENT FIX: Update public/js/core/api.js
-// Add this initialization to the AdminAPI constructor
+// Fixed public/js/core/api.js
+// Auto-configuration logic corrected to check local scope first
 
 class AdminAPI {
   constructor() {
@@ -8,42 +8,60 @@ class AdminAPI {
     this.config = null;
     this.requestCount = 0;
     
-    // 🔧 PERMANENT FIX: Auto-configure from global apiConfig
+    // 🔧 PERMANENT FIX: Auto-configure from apiConfig
     this.initializeFromGlobalConfig();
   }
 
-  // 🔧 NEW METHOD: Initialize from global apiConfig
+  // 🔧 FIXED METHOD: Check local scope first, then global (with validation)
   initializeFromGlobalConfig() {
-    // Check if apiConfig exists globally
-    if (typeof window !== 'undefined' && typeof window.apiConfig !== 'undefined') {
+    // Check for apiConfig in current/local scope FIRST
+    if (typeof apiConfig !== 'undefined' && apiConfig.baseUrl) {
+      this.baseUrl = apiConfig.baseUrl;
+      this.apiKey = apiConfig.apiKey || '';
+      this.config = apiConfig;
+      console.log('🔧 AdminAPI auto-configured from local apiConfig');
+      console.log('   baseUrl:', this.baseUrl);
+      console.log('   apiKey:', this.apiKey ? 'SET' : 'EMPTY');
+    } 
+    // Fallback: check if apiConfig exists globally  
+    else if (typeof window !== 'undefined' && typeof window.apiConfig !== 'undefined' && window.apiConfig.baseUrl) {
       this.baseUrl = window.apiConfig.baseUrl;
       this.apiKey = window.apiConfig.apiKey || '';
       this.config = window.apiConfig;
       console.log('🔧 AdminAPI auto-configured from global apiConfig');
       console.log('   baseUrl:', this.baseUrl);
       console.log('   apiKey:', this.apiKey ? 'SET' : 'EMPTY');
-    } else if (typeof apiConfig !== 'undefined') {
-      // Fallback: check for apiConfig in current scope
-      this.baseUrl = apiConfig.baseUrl;
-      this.apiKey = apiConfig.apiKey || '';
-      this.config = apiConfig;
-      console.log('🔧 AdminAPI auto-configured from local apiConfig');
     } else {
-      console.warn('⚠️ AdminAPI: No apiConfig found - manual configuration required');
+      console.warn('⚠️ AdminAPI: No valid apiConfig found - will retry on first request');
+      // Set up delayed configuration on first request
+      this._needsConfiguration = true;
     }
   }
 
-  // 🔧 NEW METHOD: Manual configuration override
+  // 🔧 NEW METHOD: Try to configure on first request if needed
+  _ensureConfigured() {
+    if (this._needsConfiguration) {
+      console.log('🔄 Attempting delayed configuration...');
+      this.initializeFromGlobalConfig();
+      this._needsConfiguration = false;
+    }
+  }
+
+  // 🔧 Manual configuration override
   configure(config) {
     this.baseUrl = config.baseUrl || this.baseUrl;
     this.apiKey = config.apiKey || this.apiKey;
     this.config = { ...this.config, ...config };
     console.log('🔧 AdminAPI manually configured');
+    console.log('   baseUrl:', this.baseUrl);
+    console.log('   apiKey:', this.apiKey ? 'SET' : 'EMPTY');
     return this;
   }
 
-  // Rest of your existing AdminAPI methods...
   async request(endpoint, options = {}) {
+    // Try delayed configuration if needed
+    this._ensureConfigured();
+    
     this.requestCount++;
     const url = `${this.baseUrl}${endpoint}`;
     
@@ -113,3 +131,6 @@ class AdminAPI {
     };
   }
 }
+
+// Create global instance
+window.adminAPI = new AdminAPI();
