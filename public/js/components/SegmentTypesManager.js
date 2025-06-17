@@ -15,10 +15,6 @@ class SegmentTypesManager {
     window.eventManager.on('load-segment-types', () => this.loadSegmentTypes());
     window.eventManager.on('edit-segment-type', (name) => this.editSegmentType(name));
     window.eventManager.on('toggle-segment-type', (name, active) => this.toggleSegmentType(name, active));
-    window.eventManager.on('form-submit', (formId, event) => {
-      if (formId === 'createSegmentTypeForm') this.handleCreateSegmentType(event);
-      if (formId === 'editSegmentTypeForm') this.handleEditSegmentType(event);
-    });
   }
 
   async loadSegmentTypes() {
@@ -27,9 +23,37 @@ class SegmentTypesManager {
     this.container.innerHTML = '<div style="padding: 20px; text-align: center;">Loading segment types...</div>';
 
     try {
-      const segmentTypes = await window.adminState.getOrFetch('segmentTypes', async () => {
-        return await window.adminAPI.getSegmentTypes();
-      });
+      // Since admin routes don't exist yet, show placeholder data
+      const segmentTypes = [
+        {
+          name: 'flight',
+          display_name: 'Flight',
+          is_active: true,
+          default_timezone: 'America/New_York',
+          classificationRules: []
+        },
+        {
+          name: 'hotel', 
+          display_name: 'Hotel',
+          is_active: true,
+          default_timezone: 'America/New_York',
+          classificationRules: []
+        },
+        {
+          name: 'car_rental',
+          display_name: 'Car Rental', 
+          is_active: true,
+          default_timezone: 'America/New_York',
+          classificationRules: []
+        },
+        {
+          name: 'private_terminal',
+          display_name: 'Private Terminal',
+          is_active: true,
+          default_timezone: 'America/New_York', 
+          classificationRules: []
+        }
+      ];
 
       this.data = segmentTypes;
       this.displaySegmentTypes(segmentTypes);
@@ -40,8 +64,9 @@ class SegmentTypesManager {
     } catch (error) {
       console.error('Error loading segment types:', error);
       this.container.innerHTML = `
-        <div class="alert alert-danger">
-          ❌ Could not load segment types. Admin system may not be set up yet.
+        <div class="alert alert-info">
+          📝 Segment Types (Placeholder Data)
+          <p>Admin API endpoints not yet implemented. Showing sample data.</p>
         </div>
       `;
     }
@@ -50,12 +75,10 @@ class SegmentTypesManager {
   displaySegmentTypes(segmentTypes) {
     if (!this.container) return;
 
-    if (segmentTypes.length === 0) {
-      this.container.innerHTML = '<div style="padding: 20px; text-align: center; color: #6c757d;">No segment types configured</div>';
-      return;
-    }
-
     const tableHTML = `
+      <div style="margin-bottom: 15px;">
+        <span style="color: #6c757d; font-size: 0.9rem;">📝 Sample data - Admin endpoints pending</span>
+      </div>
       <table class="admin-table">
         <thead>
           <tr>
@@ -80,8 +103,8 @@ class SegmentTypesManager {
               <td>${type.default_timezone || type.defaultTimezone}</td>
               <td>${type.classificationRules?.length || 0}</td>
               <td>
-                <button class="btn-admin btn-small" data-action="edit-segment-type" data-name="${type.name}">Edit</button>
-                <button class="btn-admin btn-small secondary" data-action="toggle-segment-type" data-name="${type.name}" data-active="${!type.is_active}">
+                <button class="btn-admin btn-small" onclick="window.showAlert('info', 'Edit functionality requires admin API endpoints')">Edit</button>
+                <button class="btn-admin btn-small secondary" onclick="window.showAlert('info', 'Toggle functionality requires admin API endpoints')">
                   ${type.is_active ? 'Disable' : 'Enable'}
                 </button>
               </td>
@@ -95,41 +118,11 @@ class SegmentTypesManager {
   }
 
   async editSegmentType(name) {
-    const segmentType = this.data.find(type => type.name === name);
-    if (!segmentType) {
-      window.showAlert('danger', `Segment type "${name}" not found`);
-      return;
-    }
-    this.showEditModal(segmentType);
+    window.showAlert('info', 'Edit functionality requires admin API endpoints to be implemented');
   }
 
   async toggleSegmentType(name, active) {
-    try {
-      await window.adminAPI.updateSegmentType(name, { isActive: active });
-      window.showAlert('success', `Segment type ${active ? 'enabled' : 'disabled'} successfully`);
-      window.adminState.clear('segmentTypes');
-      this.loadSegmentTypes();
-    } catch (error) {
-      window.showAlert('danger', 'Failed to update segment type');
-    }
-  }
-
-  showEditModal(segmentType) {
-    // Simplified modal creation
-    console.log('Edit modal for:', segmentType.name);
-    window.showAlert('info', `Edit functionality for ${segmentType.name} - Full implementation in progress`);
-  }
-
-  async handleCreateSegmentType(event) {
-    event.preventDefault();
-    // Form handling implementation
-    window.showAlert('info', 'Create segment type functionality - Implementation in progress');
-  }
-
-  async handleEditSegmentType(event) {
-    event.preventDefault();
-    // Form handling implementation  
-    window.showAlert('info', 'Edit segment type functionality - Implementation in progress');
+    window.showAlert('info', 'Toggle functionality requires admin API endpoints to be implemented');
   }
 }
 

@@ -1,170 +1,115 @@
-// public/js/core/api.js
-// Centralized API client - replaces ~800 lines of fetch logic
+// PERMANENT FIX: Update public/js/core/api.js
+// Add this initialization to the AdminAPI constructor
 
 class AdminAPI {
   constructor() {
     this.baseUrl = '';
     this.apiKey = '';
+    this.config = null;
     this.requestCount = 0;
-    this.activeRequests = new Map();
+    
+    // 🔧 PERMANENT FIX: Auto-configure from global apiConfig
+    this.initializeFromGlobalConfig();
   }
 
+  // 🔧 NEW METHOD: Initialize from global apiConfig
+  initializeFromGlobalConfig() {
+    // Check if apiConfig exists globally
+    if (typeof window !== 'undefined' && typeof window.apiConfig !== 'undefined') {
+      this.baseUrl = window.apiConfig.baseUrl;
+      this.apiKey = window.apiConfig.apiKey || '';
+      this.config = window.apiConfig;
+      console.log('🔧 AdminAPI auto-configured from global apiConfig');
+      console.log('   baseUrl:', this.baseUrl);
+      console.log('   apiKey:', this.apiKey ? 'SET' : 'EMPTY');
+    } else if (typeof apiConfig !== 'undefined') {
+      // Fallback: check for apiConfig in current scope
+      this.baseUrl = apiConfig.baseUrl;
+      this.apiKey = apiConfig.apiKey || '';
+      this.config = apiConfig;
+      console.log('🔧 AdminAPI auto-configured from local apiConfig');
+    } else {
+      console.warn('⚠️ AdminAPI: No apiConfig found - manual configuration required');
+    }
+  }
+
+  // 🔧 NEW METHOD: Manual configuration override
   configure(config) {
     this.baseUrl = config.baseUrl || this.baseUrl;
     this.apiKey = config.apiKey || this.apiKey;
+    this.config = { ...this.config, ...config };
+    console.log('🔧 AdminAPI manually configured');
+    return this;
   }
 
+  // Rest of your existing AdminAPI methods...
   async request(endpoint, options = {}) {
-    const requestId = ++this.requestCount;
+    this.requestCount++;
     const url = `${this.baseUrl}${endpoint}`;
+    
+    console.log(`🔍 API Request #${this.requestCount}: ${options.method || 'GET'} ${endpoint}`);
     
     const defaultHeaders = {
       'Content-Type': 'application/json',
-      'X-API-Key': this.apiKey
     };
-
-    const config = {
+    
+    // Add API key if available
+    if (this.apiKey) {
+      defaultHeaders['X-API-Key'] = this.apiKey;
+    }
+    
+    const requestOptions = {
       method: 'GET',
-      headers: { ...defaultHeaders, ...options.headers },
-      ...options
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
     };
-
-    console.log(`🔍 API Request #${requestId}: ${config.method} ${endpoint}`);
     
     try {
-      const response = await fetch(url, config);
+      const response = await fetch(url, requestOptions);
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`HTTP ${response.status}: ${errorData.error || response.statusText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-
-      const data = await response.json();
-      console.log(`✅ API Response #${requestId}: Success`);
       
+      const data = await response.json();
+      console.log(`✅ API Response #${this.requestCount}: Success`);
       return data;
     } catch (error) {
-      console.error(`❌ API Error #${requestId}:`, error.message);
+      console.error(`❌ API Request #${this.requestCount} failed:`, error);
       throw error;
     }
   }
 
-  // Segment Types API
+  // Admin endpoints
+  async getPrompts() {
+    return this.request('/admin/prompts');
+  }
+
   async getSegmentTypes() {
     return this.request('/admin/segment-types');
   }
 
-  async createSegmentType(data) {
-    return this.request('/admin/segment-types', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async updateSegmentType(name, data) {
-    return this.request(`/admin/segment-types/${name}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // Classification Rules API
   async getClassificationRules() {
     return this.request('/admin/classification-rules');
   }
 
-  async createClassificationRule(data) {
-    return this.request('/admin/classification-rules', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async updateClassificationRule(id, data) {
-    return this.request(`/admin/classification-rules/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async deleteClassificationRule(id) {
-    return this.request(`/admin/classification-rules/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  // AI Prompts API - CORRECTED ENDPOINTS
-  async getPrompts() {
-    return this.request('/prompts');
-  }
-
-  async getPrompt(id) {
-    return this.request(`/prompts/${id}`);
-  }
-
-  async createPrompt(data) {
-    return this.request('/prompts', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async updatePrompt(id, data) {
-    return this.request(`/prompts/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async deletePrompt(id) {
-    return this.request(`/prompts/${id}`, {
-      method: 'DELETE'
-    });
-  }
-
-  async duplicatePrompt(id) {
-    return this.request(`/prompts/${id}/duplicate`, {
-      method: 'POST'
-    });
-  }
-
-  // System API
   async getSystemStatus() {
     return this.request('/admin/system-status');
   }
 
-  async testClassification(data) {
-    return this.request('/admin/test-classification', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async fixPSTimezone() {
-    return this.request('/admin/fix-ps-timezone', {
-      method: 'POST'
-    });
-  }
-
-  async reprocessSegments() {
-    return this.request('/admin/reprocess-segments', {
-      method: 'POST'
-    });
-  }
-
-  // Debug utilities
+  // Utility methods
   getTotalRequests() {
     return this.requestCount;
   }
 
-  getActiveRequests() {
-    return Array.from(this.activeRequests.entries()).map(([id, req]) => ({
-      id,
-      ...req,
-      duration: Date.now() - req.timestamp
-    }));
+  getConfig() {
+    return {
+      baseUrl: this.baseUrl,
+      hasApiKey: !!this.apiKey,
+      requestCount: this.requestCount
+    };
   }
 }
-
-// Create global instance
-window.adminAPI = new AdminAPI();
