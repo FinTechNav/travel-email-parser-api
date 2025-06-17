@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique @map("email")
+  name            String?          @map("name")
+  password        String           @map("password")
+  apiKey          String           @unique @default(cuid()) @map("api_key")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  usage           ApiUsage[]
+  itineraries     Itinerary[]
+  processedEmails ProcessedEmail[]
+
+  @@map("users")
+}
+
+model Itinerary {
+  id          String    @id @default(cuid())
+  destination String?   @map("destination")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  endDate     DateTime? @map("end_date")
+  startDate   DateTime? @map("start_date")
+  tripName    String?   @map("trip_name")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segments    Segment[]
+
+  @@index([userId])
+  @@index([startDate])
+  @@map("itineraries")
+}
+
+model Segment {
+  id                 String    @id @default(cuid())
+  type               String    @map("type")
+  origin             String?   @map("origin")
+  destination        String?   @map("destination")
+  details            Json?     @map("details")
+  confirmationNumber String?   @map("confirmation_number")
+  endDateTime        DateTime? @map("end_date_time")
+  itineraryId        String    @map("itinerary_id")
+  parsedAt           DateTime  @default(now()) @map("parsed_at")
+  rawEmail           String?   @map("raw_email")
+  startDateTime      DateTime? @map("start_date_time")
+  itinerary          Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+
+  @@index([itineraryId])
+  @@index([type])
+  @@index([startDateTime])
+  @@index([confirmationNumber])
+  @@map("segments")
+}
+
+model ApiUsage {
+  id            String   @id @default(cuid())
+  endpoint      String   @map("endpoint")
+  date          DateTime @default(now()) @map("date")
+  requestsCount Int      @default(1) @map("requests_count")
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint, date])
+  @@index([userId])
+  @@index([date])
+  @@map("api_usage")
+}
+
+model ProcessedEmail {
+  id          String   @id @default(cuid())
+  subject     String?  @map("subject")
+  success     Boolean  @default(false) @map("success")
+  source      String   @default("email_polling") @map("source")
+  emailHash   String   @unique @map("email_hash")
+  fromAddress String?  @map("from_address")
+  messageId   String?  @map("message_id")
+  processedAt DateTime @default(now()) @map("processed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([userId])
+  @@index([processedAt])
+  @@index([success])
+  @@index([emailHash, messageId])
+  @@index([userId, processedAt])
+  @@map("processed_emails")
+}
+
+model PromptTemplate {
+  id              String        @id @default(cuid())
+  name            String        @unique @map("name")
+  category        String        @map("category")
+  type            String        @map("type")
+  version         Int           @default(1) @map("version")
+  prompt          String        @map("prompt")
+  variables       Json?         @map("variables")
+  metadata        Json?         @map("metadata")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  createdBy       String?       @map("created_by")
+  isActive        Boolean       @default(true) @map("is_active")
+  segmentTypeName String?       @map("segment_type_name")
+  successRate     Float?        @map("success_rate")
+  testGroup       String?       @map("test_group")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  usageCount      Int           @default(0) @map("usage_count")
+  usage           PromptUsage[]
+
+  @@map("prompt_templates")
+}
+
+model AIConfiguration {
+  id           String   @id @default(cuid())
+  name         String   @unique @map("name")
+  model        String   @map("model")
+  temperature  Float    @default(0.1) @map("temperature")
+  metadata     Json?    @map("metadata")
+  costPerToken Float?   @map("cost_per_token")
+  createdAt    DateTime @default(now()) @map("created_at")
+  isActive     Boolean  @default(true) @map("is_active")
+  maxTokens    Int      @default(2000) @map("max_tokens")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_configurations")
+}
+
+model PromptUsage {
+  id           String         @id @default(cuid())
+  templateId   String
+  userId       String?
+  emailType    String
+  success      Boolean
+  errorMessage String?
+  responseTime Int
+  tokenUsage   Int?
+  createdAt    DateTime       @default(now())
+  template     PromptTemplate @relation(fields: [templateId], references: [id])
+
+  @@map("prompt_usage")
+}
+
+model EmailClassificationRule {
+  id              String   @id @default(cuid())
+  name            String   @unique @map("name")
+  pattern         String   @map("pattern")
+  priority        Int      @default(0) @map("priority")
+  metadata        Json?    @map("metadata")
+  caseInsensitive Boolean  @default(true) @map("case_insensitive")
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdBy       String?  @map("created_by")
+  emailType       String   @map("email_type")
+  isActive        Boolean  @default(true) @map("is_active")
+  ruleType        String   @map("rule_type")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([emailType, ruleType])
+  @@index([priority])
+  @@map("email_classification_rules")
+}
+
+model EmailSubjectPattern {
+  id         String   @id @default(cuid())
+  name       String   @unique @map("name")
+  pattern    String   @map("pattern")
+  variations Json?    @map("variations")
+  createdAt  DateTime @default(now()) @map("created_at")
+  emailType  String   @map("email_type")
+  isActive   Boolean  @default(true) @map("is_active")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([emailType])
+  @@map("email_subject_patterns")
+}
+
+model EmailProcessingConfig {
+  id          String   @id @default(cuid())
+  category    String   @map("category")
+  key         String   @map("key")
+  value       Json     @map("value")
+  description String?  @map("description")
+  createdAt   DateTime @default(now()) @map("created_at")
+  isActive    Boolean  @default(true) @map("is_active")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("email_processing_config")
+}
+
+model EmailSenderRule {
+  id            String   @id @default(cuid())
+  name          String   @unique @map("name")
+  metadata      Json?    @map("metadata")
+  createdAt     DateTime @default(now()) @map("created_at")
+  emailType     String?  @map("email_type")
+  isActive      Boolean  @default(true) @map("is_active")
+  senderPattern String   @map("sender_pattern")
+  trustLevel    String   @default("normal") @map("trust_level")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([trustLevel])
+  @@map("email_sender_rules")
+}
+
+model SegmentTypeConfig {
+  id                   Int                  @id @default(autoincrement())
+  name                 String               @unique @db.VarChar(50)
+  displayName          String               @map("display_name") @db.VarChar(100)
+  description          String?
+  isActive             Boolean?             @default(true) @map("is_active")
+  defaultTimezone      String?              @default("America/New_York") @map("default_timezone") @db.VarChar(50)
+  displayConfig        Json?                @default("{}") @map("display_config")
+  createdAt            DateTime?            @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime?            @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  classification_rules ClassificationRule[]
+  display_rules        DisplayRule[]
+  timezone_rules       TimezoneRule[]
+
+  @@map("segment_type_configs")
+}
+
+model ClassificationRule {
+  id                   Int                @id @default(autoincrement())
+  name                 String             @db.VarChar(100)
+  segmentTypeName      String?            @map("segment_type_name") @db.VarChar(50)
+  pattern              String
+  type                 String?            @default("keyword") @db.VarChar(20)
+  priority             Int?               @default(10)
+  isActive             Boolean?           @default(true) @map("is_active")
+  createdAt            DateTime?          @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt            DateTime?          @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  segment_type_configs SegmentTypeConfig? @relation(fields: [segmentTypeName], references: [name], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([priority(sort: Desc)], map: "idx_classification_rules_priority")
+  @@index([segmentTypeName], map: "idx_classification_rules_segment_type")
+  @@map("classification_rules")
+}
+
+model TimezoneRule {
+  id                   Int                @id @default(autoincrement())
+  segmentTypeName      String?            @map("segment_type_name") @db.VarChar(50)
+  locationPattern      String             @map("location_pattern") @db.VarChar(100)
+  timezone             String             @db.VarChar(50)
+  priority             Int?               @default(10)
+  createdAt            DateTime?          @default(now()) @map("created_at") @db.Timestamp(6)
+  segment_type_configs SegmentTypeConfig? @relation(fields: [segmentTypeName], references: [name], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([segmentTypeName], map: "idx_timezone_rules_segment_type")
+  @@map("timezone_rules")
+}
+
+model DisplayRule {
+  id                   Int                @id @default(autoincrement())
+  segmentTypeName      String?            @map("segment_type_name") @db.VarChar(50)
+  primaryTimeField     String?            @default("departure") @map("primary_time_field") @db.VarChar(30)
+  timezoneSource       String?            @default("origin") @map("timezone_source") @db.VarChar(20)
+  routeFormat          String?            @default("{origin} → {destination}") @map("route_format") @db.VarChar(100)
+  customFields         Json?              @default("{}") @map("custom_fields")
+  createdAt            DateTime?          @default(now()) @map("created_at") @db.Timestamp(6)
+  segment_type_configs SegmentTypeConfig? @relation(fields: [segmentTypeName], references: [name], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("display_rules")
+}
+
+model TimezoneCache {
+  id        Int      @id @default(autoincrement())
+  location  String   @unique @map("location") @db.VarChar(255)
+  timezone  String   @map("timezone") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("timezone_cache")
+}
+
+

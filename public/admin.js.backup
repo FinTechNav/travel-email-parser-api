@@ -475,6 +475,18 @@ function showModal(modalId) {
   } else {
     console.error(`❌ Modal not found: ${modalId}`);
   }
+  // In your admin.js showModal function, add this case:
+  if (modalId === 'createPromptModal') {
+    setTimeout(() => {
+      const form = document.getElementById('createPromptForm');
+      if (form) {
+        form.removeAttribute('action');
+        form.removeAttribute('method');
+        form.action = '';
+        form.method = '';
+      }
+    }, 50);
+  }
 }
 
 function hideModal(modalId) {
@@ -579,10 +591,12 @@ function setupFormEventListeners() {
   }
 
   // Create Prompt Form
+  // In setupFormEventListeners() or setupPromptFormHandlers()
   const createPromptForm = document.getElementById('createPromptForm');
   if (createPromptForm) {
     createPromptForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
 
       const formData = new FormData(e.target);
       const data = {
@@ -611,7 +625,8 @@ function setupFormEventListeners() {
           showAlert('danger', error.error || 'Failed to create prompt');
         }
       } catch (error) {
-        showAlert('danger', 'Failed to create prompt - admin system may not be set up');
+        console.error('Error creating prompt:', error);
+        showAlert('danger', 'Failed to create prompt');
       }
     });
   }
@@ -704,6 +719,15 @@ function setupAdminActionListeners() {
           break;
         case 'show-create-prompt-modal':
           showModal('createPromptModal');
+          break;
+        case 'show-modal':
+          const targetModalId = this.getAttribute('data-modal');
+          if (targetModalId && typeof showModal === 'function') {
+            showModal(targetModalId);
+          }
+          break;
+        case 'load-segment-types':
+          loadSegmentTypes();
           break;
         case 'load-segment-types':
           loadSegmentTypes();
@@ -1097,6 +1121,9 @@ async function loadPrompts() {
     if (response.ok) {
       const prompts = await response.json();
       displayPrompts(prompts);
+      if (typeof setupAdminActionListeners === 'function') {
+        setupAdminActionListeners();
+      }
 
       // Add enhanced features after displaying prompts (only once)
       if (!window.promptEnhancementsLoaded) {
@@ -1747,44 +1774,6 @@ function populatePromptEditModal(prompt) {
 
 function setupPromptFormHandlers() {
   // Create Prompt Form Handler
-  const createPromptForm = document.getElementById('createPromptForm');
-  if (createPromptForm) {
-    createPromptForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const formData = new FormData(e.target);
-      const data = {
-        name: formData.get('name'),
-        category: formData.get('category'),
-        type: formData.get('type'),
-        version: parseInt(formData.get('version')) || 1,
-        prompt: formData.get('prompt'),
-        testGroup: formData.get('testGroup') || null,
-        isActive: formData.get('isActive') === 'on',
-      };
-
-      try {
-        const response = await fetch('/api/v1/admin/prompts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-
-        if (response.ok) {
-          hideModal('createPromptModal');
-          e.target.reset();
-          showAlert('success', 'AI prompt created successfully');
-          loadPrompts();
-        } else {
-          const error = await response.json();
-          showAlert('danger', error.error || 'Failed to create prompt');
-        }
-      } catch (error) {
-        console.error('Error creating prompt:', error);
-        showAlert('danger', 'Failed to create prompt - check console for details');
-      }
-    });
-  }
 
   // Edit Prompt Form Handler
   const editPromptForm = document.getElementById('editPromptForm');

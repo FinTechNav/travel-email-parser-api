@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Travel Email Parser - Latest Results</title>
-    <link rel="stylesheet" href="dashboard.css">
-        <!-- 🔍 CSP VIOLATION DETECTION - Add this at end of head -->
+    <link rel="stylesheet" href="dashboard.css" />
+    <!-- 🔍 CSP VIOLATION DETECTION - Add this at end of head -->
   </head>
   <body>
     <div class="container">
@@ -16,12 +16,8 @@
 
       <!-- Tab Navigation - FIXED: Removed onclick attributes -->
       <div class="tab-navigation">
-        <button class="tab-button active" data-tab="dashboard">
-          📧 Email Parser
-        </button>
-        <button class="tab-button" data-tab="admin">
-          ⚙️ Admin Panel
-        </button>
+        <button class="tab-button active" data-tab="dashboard">📧 Email Parser</button>
+        <button class="tab-button" data-tab="admin">⚙️ Admin Panel</button>
       </div>
 
       <!-- ORIGINAL DASHBOARD TAB -->
@@ -50,7 +46,16 @@
                   <div><strong>Created:</strong> <span id="userCreated">-</span></div>
                   <div>
                     <strong>API Key:</strong>
-                    <code id="userApiKey" style="font-family: monospace; background: #e9ecef; padding: 2px 6px; border-radius: 4px;">-</code>
+                    <code
+                      id="userApiKey"
+                      style="
+                        font-family: monospace;
+                        background: #e9ecef;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                      "
+                      >-</code
+                    >
                   </div>
                 </div>
               </div>
@@ -60,7 +65,8 @@
               <input type="url" id="customUrl" placeholder="https://your-custom-api.com/api/v1" />
             </div>
             <div class="current-url">
-              <strong>Current URL:</strong> <span id="currentUrl">http://localhost:3000/api/v1</span>
+              <strong>Current URL:</strong>
+              <span id="currentUrl">http://localhost:3000/api/v1</span>
             </div>
             <button type="submit" class="btn">🔄 Connect & Load Results</button>
           </form>
@@ -88,7 +94,10 @@
           <!-- Admin Info -->
           <div class="admin-info">
             <h4>🚀 Admin Panel - Segment Type Management</h4>
-            <p>Configure email processing rules, manage segment types, and update parsing logic without code changes. Add new travel service types or modify existing ones.</p>
+            <p>
+              Configure email processing rules, manage segment types, and update parsing logic
+              without code changes. Add new travel service types or modify existing ones.
+            </p>
             <ul class="admin-feature-list">
               <li>Add new segment types (Uber, Lyft, Airbnb, etc.)</li>
               <li>Configure classification rules for email categorization</li>
@@ -113,7 +122,7 @@
                 </button>
               </div>
               <div id="segmentTypesContainer">
-                <div style="padding: 20px; text-align: center; color: #6c757d;">
+                <div style="padding: 20px; text-align: center; color: #6c757d">
                   Configure travel service types here (flights, hotels, rideshare, etc.)
                 </div>
               </div>
@@ -135,7 +144,7 @@
                 </button>
               </div>
               <div id="classificationRulesContainer">
-                <div style="padding: 20px; text-align: center; color: #6c757d;">
+                <div style="padding: 20px; text-align: center; color: #6c757d">
                   Classification rules determine how emails are categorized
                 </div>
               </div>
@@ -149,15 +158,12 @@
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" data-action="show-create-prompt-modal">
-                  ➕ Add New Prompt
-                </button>
                 <button class="btn-admin secondary" data-action="load-prompts">
                   🔄 Refresh Prompts
                 </button>
               </div>
               <div id="promptsContainer">
-                <div style="padding: 20px; text-align: center; color: #6c757d;">
+                <div style="padding: 20px; text-align: center; color: #6c757d">
                   AI prompts control how emails are parsed for each segment type
                 </div>
               </div>
@@ -195,18 +201,18 @@
             </div>
             <div class="admin-section-content">
               <div id="systemInfo">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
                   <div>
-                    <h5 style="color: #4a5568; margin-bottom: 10px;">Database Status</h5>
-                    <p style="color: #28a745;">✅ Connected</p>
-                    <h5 style="color: #4a5568; margin: 15px 0 10px 0;">Email Processor</h5>
-                    <p style="color: #28a745;">✅ Active</p>
+                    <h5 style="color: #4a5568; margin-bottom: 10px">Database Status</h5>
+                    <p style="color: #28a745">✅ Connected</p>
+                    <h5 style="color: #4a5568; margin: 15px 0 10px 0">Email Processor</h5>
+                    <p style="color: #28a745">✅ Active</p>
                   </div>
                   <div>
-                    <h5 style="color: #4a5568; margin-bottom: 10px;">Configured Types</h5>
-                    <p style="color: #4a5568;" id="segmentTypeCount">Loading...</p>
-                    <h5 style="color: #4a5568; margin: 15px 0 10px 0;">Active Rules</h5>
-                    <p style="color: #4a5568;" id="ruleCount">Loading...</p>
+                    <h5 style="color: #4a5568; margin-bottom: 10px">Configured Types</h5>
+                    <p style="color: #4a5568" id="segmentTypeCount">Loading...</p>
+                    <h5 style="color: #4a5568; margin: 15px 0 10px 0">Active Rules</h5>
+                    <p style="color: #4a5568" id="ruleCount">Loading...</p>
                   </div>
                 </div>
               </div>
@@ -221,7 +227,23 @@
 
     <!-- Include your original dashboard.js -->
     <script src="dashboard.js"></script>
-    <!-- Include new admin functionality -->
-    <script src="admin.js"></script>
+    
+    <!-- Core Infrastructure -->
+    <script src="js/core/api.js"></script>
+    <script src="js/core/state.js"></script>
+    <script src="js/core/events.js"></script>
+
+    <!-- Utilities -->
+    <script src="js/utils/helpers.js"></script>
+
+    <!-- Components -->
+    <script src="js/components/SegmentTypesManager.js"></script>
+    <script src="js/components/ClassificationRulesManager.js"></script>
+    <script src="js/components/PromptsManager.js"></script>
+    <script src="js/components/SystemStatusManager.js"></script>
+
+    <!-- Main Orchestrator -->
+    <script src="js/admin-main.js"></script>
+
   </body>
 </html>
