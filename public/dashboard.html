@@ -110,14 +110,14 @@
           <!-- Segment Types Management -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h3>🏷️ Segment Types</h3>
+              <h3>🏷️ Segment Types <span id="segmentTypeCount">Loading...</span></h3>
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" data-action="show-create-segment-modal">
+                <button class="btn-admin success" data-action="create-segment-type">
                   ➕ Add New Type
                 </button>
-                <button class="btn-admin secondary" data-action="load-segment-types">
+                <button class="btn-admin secondary" data-action="refresh-segment-types">
                   🔄 Refresh Types
                 </button>
               </div>
@@ -132,14 +132,14 @@
           <!-- Classification Rules Management -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h3>🔍 Classification Rules</h3>
+              <h3>🔍 Classification Rules <span id="ruleCount">Loading...</span></h3>
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin success" data-action="show-create-rule-modal">
+                <button class="btn-admin success" data-action="create-classification-rule">
                   ➕ Add New Rule
                 </button>
-                <button class="btn-admin secondary" data-action="load-classification-rules">
+                <button class="btn-admin secondary" data-action="refresh-classification-rules">
                   🔄 Refresh Rules
                 </button>
               </div>
@@ -154,11 +154,11 @@
           <!-- AI Prompts Management -->
           <div class="admin-section">
             <div class="admin-section-header">
-              <h3>🤖 AI Parsing Prompts</h3>
+              <h3>🤖 AI Parsing Prompts <span id="promptCount">Loading...</span></h3>
             </div>
             <div class="admin-section-content">
               <div class="quick-actions">
-                <button class="btn-admin secondary" data-action="load-prompts">
+                <button class="btn-admin secondary" data-action="refresh-prompts">
                   🔄 Refresh Prompts
                 </button>
               </div>
@@ -209,10 +209,12 @@
                     <p style="color: #28a745">✅ Active</p>
                   </div>
                   <div>
-                    <h5 style="color: #4a5568; margin-bottom: 10px">Configured Types</h5>
-                    <p style="color: #4a5568" id="segmentTypeCount">Loading...</p>
-                    <h5 style="color: #4a5568; margin: 15px 0 10px 0">Active Rules</h5>
-                    <p style="color: #4a5568" id="ruleCount">Loading...</p>
+                    <h5 style="color: #4a5568; margin-bottom: 10px">Components Status</h5>
+                    <p style="color: #4a5568">
+                      <span id="componentStatusSegmentTypes">⏳ Loading...</span><br>
+                      <span id="componentStatusRules">⏳ Loading...</span><br>
+                      <span id="componentStatusPrompts">⏳ Loading...</span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -236,7 +238,7 @@
     <!-- Utilities -->
     <script src="js/utils/helpers.js"></script>
 
-    <!-- Components -->
+    <!-- Components - FIXED: Removed duplicate SegmentTypesManager -->
     <script src="js/components/SegmentTypesManager.js"></script>
     <script src="js/components/ClassificationRulesManager.js"></script>
     <script src="js/components/PromptsManager.js"></script>
