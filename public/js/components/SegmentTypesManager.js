@@ -152,107 +152,67 @@ class SegmentTypesManager {
   }
 
   displaySegmentTypes() {
-    if (!this.container) return;
+  if (!this.container) return;
 
-    if (this.segmentTypes.length === 0) {
-      this.container.innerHTML = `
-      <div style="text-align: center; padding: 40px 20px;">
-        <div style="color: #a0aec0; font-size: 48px; margin-bottom: 16px;">📋</div>
-        <h4 style="color: #4a5568; margin-bottom: 8px;">No segment types configured yet</h4>
-        <p style="color: #718096; margin-bottom: 20px;">Create your first segment type to start organizing travel services.</p>
-        <button data-action="create-segment-type" style="
-          background: #48bb78; 
-          color: white; 
-          border: none; 
-          padding: 12px 24px; 
-          border-radius: 8px; 
-          font-weight: 500;
-          cursor: pointer;
-          font-size: 14px;
-        ">
-          ➕ Create First Segment Type
-        </button>
-      </div>
-      `;
-      return;
-    }
-
-    const segmentTypesHtml = this.segmentTypes.map(type => `
-      <div class="admin-card" style="margin-bottom: 15px; border: 1px solid #e0e6ed; border-radius: 8px; background: white;">
-        <div class="admin-card-header" style="padding: 15px; border-bottom: 1px solid #e0e6ed; display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <h6 style="margin: 0; font-size: 16px; color: #2d3748;">${this.escapeHtml(type.displayName || type.name)}</h6>
-            <small style="color: #718096;">${this.escapeHtml(type.name)}</small>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <span class="status-badge ${type.isActive ? 'active' : 'inactive'}" style="
-              padding: 4px 8px; 
-              border-radius: 12px; 
-              font-size: 12px; 
-              font-weight: 500;
-              ${type.isActive ? 'background: #c6f6d5; color: #22543d;' : 'background: #e2e8f0; color: #4a5568;'}
-            ">
-              ${type.isActive ? '✅ Active' : '⏸️ Inactive'}
-            </span>
-            <button class="btn-admin-sm" 
-                    data-action="edit-segment-type" 
-                    data-segment-name="${this.escapeHtml(type.name)}"
-                    style="padding: 6px 12px; background: #4299e1; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;">
-              ✏️ Edit
-            </button>
-            <button class="btn-admin-sm" 
-                    data-action="view-segment-rules" 
-                    data-segment-name="${this.escapeHtml(type.name)}"
-                    style="padding: 6px 12px; background: #805ad5; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;">
-              📋 Rules (${(type.classificationRules || []).length})
-            </button>
-          </div>
-        </div>
-        
-        <div class="admin-card-body" style="padding: 15px;">
-          ${type.description ? `<p style="margin: 0 0 10px 0; color: #4a5568;">${this.escapeHtml(type.description)}</p>` : ''}
-          
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
-            <div>
-              <small style="color: #718096; font-weight: 500;">Default Timezone:</small><br>
-              <code style="background: #f7fafc; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #2d3748;">
-                ${this.escapeHtml(type.defaultTimezone || 'Not set')}
-              </code>
-            </div>
-            <div>
-              <small style="color: #718096; font-weight: 500;">Classification Rules:</small><br>
-              <span style="background: #bee3f8; color: #2c5282; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;">
-                ${(type.classificationRules || []).length} rules
-              </span>
-            </div>
-          </div>
-
-          ${type.classificationRules && type.classificationRules.length > 0 ? `
-            <div style="margin-top: 15px;">
-              <small style="color: #718096; font-weight: 500;">Sample Rules:</small>
-              <div style="margin-top: 5px; display: flex; flex-wrap: wrap; gap: 5px;">
-                ${type.classificationRules.slice(0, 3).map(rule => `
-                  <span style="
-                    background: #f0f4f8; 
-                    color: #2d3748; 
-                    padding: 2px 8px; 
-                    border-radius: 12px; 
-                    font-size: 11px; 
-                    border: 1px solid #e2e8f0;
-                  " title="${this.escapeHtml(rule.pattern || '')}">
-                    ${this.escapeHtml(rule.name || 'Unnamed')} (${rule.type || 'unknown'})
-                  </span>
-                `).join('')}
-                ${type.classificationRules.length > 3 ? `<span style="color: #718096; font-size: 12px;">... +${type.classificationRules.length - 3} more</span>` : ''}
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      </div>
-    `).join('');
-
-    this.container.innerHTML = segmentTypesHtml;
+  if (this.segmentTypes.length === 0) {
+    this.container.innerHTML = `
+    <div style="text-align: center; padding: 40px 20px;">
+      <div style="color: #a0aec0; font-size: 48px; margin-bottom: 16px;">📋</div>
+      <h4 style="color: #4a5568; margin-bottom: 8px;">No segment types configured yet</h4>
+      <p style="color: #718096; margin-bottom: 20px;">Create your first segment type to start organizing travel services.</p>
+      <button data-action="create-segment-type" style="
+        background: #48bb78; 
+        color: white; 
+        border: none; 
+        padding: 12px 24px; 
+        border-radius: 8px; 
+        font-weight: 500;
+        cursor: pointer;
+        font-size: 14px;
+      ">
+        ➕ Create First Segment Type
+      </button>
+    </div>
+    `;
+    return;
   }
+
+  const segmentTypesHtml = `
+    <table style="width: 100%; border-collapse: collapse; background: white;">
+      <thead>
+        <tr style="background: #f8f9fa;">
+          <th style="padding: 12px 16px; text-align: left; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">TYPE NAME</th>
+          <th style="padding: 12px 16px; text-align: left; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">DISPLAY NAME</th>
+          <th style="padding: 12px 16px; text-align: left; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">DEFAULT TIMEZONE</th>
+          <th style="padding: 12px 16px; text-align: center; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">CLASSIFICATION RULES</th>
+          <th style="padding: 12px 16px; text-align: center; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">STATUS</th>
+          <th style="padding: 12px 16px; text-align: center; color: #495057; font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid #dee2e6;">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${this.segmentTypes.map(type => `
+          <tr style="border-bottom: 1px solid #dee2e6;">
+            <td style="padding: 12px 16px; color: #212529;">${this.escapeHtml(type.name)}</td>
+            <td style="padding: 12px 16px; color: #212529;">${this.escapeHtml(type.displayName || type.name)}</td>
+            <td style="padding: 12px 16px; color: #212529;"><code style="background: #f8f9fa; padding: 2px 6px; border-radius: 4px;">${this.escapeHtml(type.defaultTimezone || 'Not set')}</code></td>
+            <td style="padding: 12px 16px; text-align: center; color: #212529;">${(type.classificationRules || []).length}</td>
+            <td style="padding: 12px 16px; text-align: center;">
+              <span style="color: ${type.isActive ? '#28a745' : '#6c757d'}; font-weight: 500;">
+                ${type.isActive ? 'Active' : 'Inactive'}
+              </span>
+            </td>
+            <td style="padding: 12px 16px; text-align: center;">
+              <button data-action="edit-segment-type" data-segment-name="${this.escapeHtml(type.name)}" style="background: #007bff; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-right: 4px;">Edit</button>
+              <button data-action="view-segment-rules" data-segment-name="${this.escapeHtml(type.name)}" style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">Delete</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  this.container.innerHTML = segmentTypesHtml;
+}
 
   updateCounter() {
     const counterElement = document.getElementById('segmentTypeCount');
